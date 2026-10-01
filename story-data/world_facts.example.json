@@ -1,0 +1,9 @@
+[
+  {
+    "fact_key": "hero_father_identity",
+    "truth": "AUTHOR_ONLY_TRUE_VALUE",
+    "secrecy": "secret",
+    "reveal_after": 500,
+    "notes": "仅为示例,请替换为新小说自身的真相设定。"
+  }
+]

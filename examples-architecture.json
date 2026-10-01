@@ -1,0 +1,142 @@
+{
+  "blueprint": {
+    "title": "示例:北境疑剑",
+    "genre": "东方玄幻",
+    "tone": "冷峻悬疑",
+    "core_promise": "少年与来历不明的古剑互相试探,层层揭开身世",
+    "protagonist": "hero",
+    "narrative_voice": "第三人称限知",
+    "chapter_length_target": 2200
+  },
+  "world_facts": [
+    {
+      "fact_key": "sword_origin",
+      "truth": "示例:替换为你的作者层真相",
+      "secrecy": "secret",
+      "reveal_after": 60
+    }
+  ],
+  "entities": [
+    {
+      "entity_key": "hero",
+      "entity_type": "Character",
+      "name": "主角",
+      "chapter": 1,
+      "description": "外门弟子"
+    },
+    {
+      "entity_key": "sect",
+      "entity_type": "Faction",
+      "name": "宗门",
+      "chapter": 1
+    },
+    {
+      "entity_key": "sword",
+      "entity_type": "Artifact",
+      "name": "古剑",
+      "chapter": 1
+    }
+  ],
+  "identity_profiles": [
+    {
+      "profile_key": "p_hero_role",
+      "entity_key": "hero",
+      "kind": "role",
+      "value": "外门弟子",
+      "scope_key": "sect",
+      "start_chapter": 0
+    }
+  ],
+  "entity_attributes": [
+    {
+      "entity_key": "hero",
+      "attr_key": "realm",
+      "value": "炼气三层",
+      "chapter": 0
+    }
+  ],
+  "entity_relations": [
+    {
+      "source_entity_key": "hero",
+      "relation_type": "MEMBER_OF",
+      "target_entity_key": "sect",
+      "start_chapter": 0
+    },
+    {
+      "source_entity_key": "hero",
+      "relation_type": "OWNS",
+      "target_entity_key": "sword",
+      "start_chapter": 0
+    }
+  ],
+  "narrative_entity_links": [
+    {
+      "narrative_type": "thread",
+      "narrative_key": "t_sword",
+      "entity_key": "sword",
+      "role": "subject",
+      "chapter": 0
+    }
+  ],
+  "threads": [
+    {
+      "thread_key": "t_sword",
+      "name": "古剑的来历",
+      "thread_type": "mystery",
+      "introduced_chapter": 1,
+      "target_min_chapter": 50,
+      "target_max_chapter": 70
+    }
+  ],
+  "mysteries": [
+    {
+      "mystery_key": "m_sword",
+      "name": "古剑为何择主",
+      "thread_key": "t_sword",
+      "introduced_chapter": 1,
+      "target_min_chapter": 50,
+      "target_max_chapter": 70
+    }
+  ],
+  "emotion_debts": [
+    {
+      "debt_key": "d_example",
+      "thread_key": "t_sword",
+      "name": "受辱之诺",
+      "emotion_type": "humiliation",
+      "intensity": 0.6,
+      "created_chapter": 3
+    }
+  ],
+  "arcs": [
+    {
+      "arc_key": "arc_1",
+      "name": "初入宗门",
+      "order_no": 1,
+      "start_chapter": 1,
+      "target_end_chapter": 20,
+      "primary_goal": "主角立足,古剑初显异常",
+      "inherited_thread_keys": [
+        "t_sword"
+      ]
+    }
+  ],
+  "milestones": [
+    {
+      "milestone_key": "ms_1",
+      "arc_key": "arc_1",
+      "name": "跻身内门",
+      "min_chapter": 12,
+      "max_chapter": 20
+    }
+  ],
+  "thread_schedule": [
+    {
+      "schedule_key": "sch_1",
+      "thread_key": "t_sword",
+      "stage_type": "Clue",
+      "min_chapter": 4,
+      "max_chapter": 8
+    }
+  ]
+}

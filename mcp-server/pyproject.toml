@@ -1,0 +1,19 @@
+[build-system]
+requires=["setuptools>=68","wheel"]
+build-backend="setuptools.build_meta"
+[project]
+name="narrative-kg-novel-mcp"
+version="0.10.0"
+description="面向长篇小说写作的 Narrative-KG 故事图与 MCP 工具集"
+requires-python=">=3.10"
+dependencies=[]
+[project.optional-dependencies]
+mcp=["mcp>=2,<3"]
+[project.scripts]
+novel-story="novel_mcp.cli:main"
+novel-mcp-compat="novel_mcp.stdio_compat:main"
+novel-mcp-http="novel_mcp.http_compat:main"
+[tool.setuptools]
+package-dir={""="src"}
+[tool.setuptools.packages.find]
+where=["src"]

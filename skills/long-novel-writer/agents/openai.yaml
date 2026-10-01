@@ -1,0 +1,3 @@
+interface:
+  display_name: "长篇小说写作者"
+  short_description: "借助实体图世界模型、Narrative-KG 连续性管控与秘密状态控制,规划、起草、审校、修订并定稿提交长篇小说。"

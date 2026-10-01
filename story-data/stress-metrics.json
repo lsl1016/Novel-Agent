@@ -1,0 +1,138 @@
+{
+  "chapters_committed": 10,
+  "total_chars": 19613,
+  "avg_chars_per_chapter": 1961.3,
+  "review": {
+    "total_review_records": 88,
+    "block_count": 1,
+    "block_rate": 0.0114,
+    "knowledge_leak_blocks": 0,
+    "by_reviewer": {
+      "character:PASS": 11,
+      "continuity:PASS": 11,
+      "knowledge_leak:PASS": 11,
+      "narrative:PASS": 11,
+      "semantic_character:PASS": 5,
+      "semantic_character:WARN": 6,
+      "semantic_knowledge_leak:PASS": 1,
+      "semantic_knowledge_leak:WARN": 10,
+      "semantic_narrative:BLOCK": 1,
+      "semantic_narrative:PASS": 1,
+      "semantic_narrative:WARN": 9,
+      "semantic_pacing:PASS": 2,
+      "semantic_pacing:WARN": 9
+    }
+  },
+  "revision_rounds": {
+    "1": 0,
+    "2": 0,
+    "3": 0,
+    "4": 0,
+    "5": 1,
+    "6": 0,
+    "7": 0,
+    "8": 0,
+    "9": 0,
+    "10": 0
+  },
+  "avg_revision_rounds": 0.1,
+  "human_interventions": {
+    "resolved": 10
+  },
+  "runs": [
+    {
+      "run_id": "run_c4373633619b4870",
+      "status": "completed",
+      "committed": 10
+    }
+  ],
+  "context_growth": {
+    "writer_tokens_by_chapter": [
+      [
+        1,
+        5594
+      ],
+      [
+        2,
+        7107
+      ],
+      [
+        3,
+        8242
+      ],
+      [
+        4,
+        8268
+      ],
+      [
+        5,
+        9235
+      ],
+      [
+        6,
+        9696
+      ],
+      [
+        7,
+        9596
+      ],
+      [
+        8,
+        9773
+      ],
+      [
+        9,
+        9850
+      ],
+      [
+        10,
+        9886
+      ]
+    ],
+    "tokens_per_chapter_slope": 423.81,
+    "interpretation": "slope 明显为正 => Writer 上下文随章节线性增长,需要校准预算/检索"
+  },
+  "threads": {
+    "total": 5,
+    "dormancy": [
+      {
+        "thread_key": "t_lineage",
+        "last_stage_chapter": 4,
+        "dormant_for": 6,
+        "stage_count": 1
+      },
+      {
+        "thread_key": "t_sect_plot",
+        "last_stage_chapter": 6,
+        "dormant_for": 4,
+        "stage_count": 1
+      },
+      {
+        "thread_key": "t_master_promise",
+        "last_stage_chapter": 10,
+        "dormant_for": 0,
+        "stage_count": 13
+      },
+      {
+        "thread_key": "t_rivalry",
+        "last_stage_chapter": 10,
+        "dormant_for": 0,
+        "stage_count": 21
+      },
+      {
+        "thread_key": "t_sword",
+        "last_stage_chapter": 10,
+        "dormant_for": 0,
+        "stage_count": 26
+      }
+    ]
+  },
+  "mysteries": {
+    "open": 3,
+    "resolved": 0,
+    "oldest_open_age": 9
+  },
+  "unresolved_clues": 7,
+  "open_emotion_debts": 14,
+  "oldest_open_debt_age": 9
+}
