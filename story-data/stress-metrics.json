@@ -1,29 +1,29 @@
 {
-  "chapters_committed": 33,
-  "total_chars": 61779,
-  "avg_chars_per_chapter": 1872.1,
+  "chapters_committed": 40,
+  "total_chars": 75051,
+  "avg_chars_per_chapter": 1876.3,
   "review": {
-    "total_review_records": 280,
-    "block_count": 2,
-    "block_rate": 0.0071,
+    "total_review_records": 344,
+    "block_count": 3,
+    "block_rate": 0.0087,
     "knowledge_leak_blocks": 0,
     "by_reviewer": {
-      "character:PASS": 17,
-      "character:WARN": 18,
-      "continuity:PASS": 17,
-      "continuity:WARN": 18,
-      "knowledge_leak:PASS": 35,
-      "narrative:PASS": 33,
+      "character:PASS": 22,
+      "character:WARN": 21,
+      "continuity:PASS": 22,
+      "continuity:WARN": 21,
+      "knowledge_leak:PASS": 43,
+      "narrative:PASS": 41,
       "narrative:WARN": 2,
-      "semantic_character:PASS": 15,
-      "semantic_character:WARN": 20,
+      "semantic_character:PASS": 18,
+      "semantic_character:WARN": 25,
       "semantic_knowledge_leak:PASS": 6,
-      "semantic_knowledge_leak:WARN": 29,
-      "semantic_narrative:BLOCK": 2,
+      "semantic_knowledge_leak:WARN": 37,
+      "semantic_narrative:BLOCK": 3,
       "semantic_narrative:PASS": 3,
-      "semantic_narrative:WARN": 30,
-      "semantic_pacing:PASS": 5,
-      "semantic_pacing:WARN": 30
+      "semantic_narrative:WARN": 37,
+      "semantic_pacing:PASS": 6,
+      "semantic_pacing:WARN": 37
     }
   },
   "revision_rounds": {
@@ -59,11 +59,18 @@
     "30": 0,
     "31": 0,
     "32": 0,
-    "33": 0
+    "33": 0,
+    "34": 0,
+    "35": 0,
+    "36": 0,
+    "37": 1,
+    "38": 0,
+    "39": 0,
+    "40": 0
   },
-  "avg_revision_rounds": 0.06,
+  "avg_revision_rounds": 0.07,
   "human_interventions": {
-    "resolved": 39
+    "resolved": 54
   },
   "runs": [
     {
@@ -73,8 +80,8 @@
     },
     {
       "run_id": "run_73db4108b1254164",
-      "status": "running",
-      "committed": 23
+      "status": "completed",
+      "committed": 30
     }
   ],
   "context_growth": {
@@ -210,9 +217,37 @@
       [
         33,
         11106
+      ],
+      [
+        34,
+        11361
+      ],
+      [
+        35,
+        11712
+      ],
+      [
+        36,
+        11527
+      ],
+      [
+        37,
+        11598
+      ],
+      [
+        38,
+        11994
+      ],
+      [
+        39,
+        11708
+      ],
+      [
+        40,
+        11695
       ]
     ],
-    "tokens_per_chapter_slope": 107.27,
+    "tokens_per_chapter_slope": 99.08,
     "interpretation": "slope 明显为正 => Writer 上下文随章节线性增长,需要校准预算/检索"
   },
   "threads": {
@@ -221,41 +256,41 @@
       {
         "thread_key": "t_lineage",
         "last_stage_chapter": 4,
-        "dormant_for": 29,
+        "dormant_for": 36,
         "stage_count": 1
       },
       {
         "thread_key": "t_rivalry",
         "last_stage_chapter": 19,
-        "dormant_for": 14,
+        "dormant_for": 21,
         "stage_count": 35
       },
       {
         "thread_key": "t_master_promise",
-        "last_stage_chapter": 33,
-        "dormant_for": 0,
-        "stage_count": 31
+        "last_stage_chapter": 39,
+        "dormant_for": 1,
+        "stage_count": 43
       },
       {
         "thread_key": "t_sect_plot",
-        "last_stage_chapter": 33,
+        "last_stage_chapter": 40,
         "dormant_for": 0,
-        "stage_count": 55
+        "stage_count": 70
       },
       {
         "thread_key": "t_sword",
-        "last_stage_chapter": 33,
+        "last_stage_chapter": 40,
         "dormant_for": 0,
-        "stage_count": 95
+        "stage_count": 125
       }
     ]
   },
   "mysteries": {
     "open": 3,
     "resolved": 0,
-    "oldest_open_age": 32
+    "oldest_open_age": 39
   },
-  "unresolved_clues": 104,
-  "open_emotion_debts": 45,
-  "oldest_open_debt_age": 32
+  "unresolved_clues": 129,
+  "open_emotion_debts": 53,
+  "oldest_open_debt_age": 39
 }
