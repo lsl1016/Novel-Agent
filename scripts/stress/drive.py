@@ -61,6 +61,10 @@ def main() -> int:
     ap.add_argument('--report', default='')
     ap.add_argument('--auto-answer', action='store_true', help='planner 作者提问自动拍板进 blueprint.author_decisions 并 resume')
     args = ap.parse_args()
+    try:
+        sys.stdout.reconfigure(line_buffering=True)  # 重定向到日志文件时也能 tail -f 实时看
+    except Exception:
+        pass
 
     load_env(Path(args.env))
     svc = NovelService(Path(args.db))
@@ -118,10 +122,10 @@ def main() -> int:
                         svc.novel_run_decision_submit(run_id, d['decision_id'], {'action': 'resume'})
                         print(f'[auto-answer] recorded {n} Q/A; run resumed')
                         handled = True
-                    elif d['decision_type'] in ('chapter_plan_blocked', 'planner_failed') and consecutive_blocked < 3:
+                    elif d['decision_type'] in ('chapter_plan_blocked', 'planner_failed', 'chapter_pipeline_error') and consecutive_blocked < 3:
                         consecutive_blocked += 1
                         errs = ((pr.get('validation') or {}).get('errors') or [])[:3]
-                        print(f'[auto-retry] blocked plan #{consecutive_blocked}/3 keys={sorted(pr)} errs={errs}')
+                        print(f'[auto-retry] {d["decision_type"]} #{consecutive_blocked}/3 keys={sorted(pr)} errs={errs}')
                         svc.novel_run_decision_submit(run_id, d['decision_id'], {'action': 'resume'})
                         handled = True
                 if handled:
