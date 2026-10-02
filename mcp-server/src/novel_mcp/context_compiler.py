@@ -10,9 +10,12 @@ from typing import Any
 from .store import jd, jl
 
 ROLE_DEFAULT_TOKENS = {
-    'writer': 12000,
-    'planner': 24000,
-    'reviewer': 20000,
+    # 预算两轮放宽(2026-10-02,作者确认 token 配额充足、明确要求 4 倍):
+    # writer 12k→56k / planner 24k→120k / reviewer 20k→104k。
+    # 注意:更大的预算只意味着"少裁剪",检索相关度排序不变;百章以上长跑再评估质量曲线
+    'writer': 56000,
+    'planner': 120000,
+    'reviewer': 104000,
 }
 
 ROLE_BUDGETS = {
@@ -332,17 +335,21 @@ class ContextCompiler:
             add(r['thread_key'], 'schedule', 0.25, f'due thread schedule {r["schedule_key"]}')
         open_m = self.store.open_mysteries(snapshot_chapter)
         debts = self.store.open_debts(snapshot_chapter)
+        # 陈年/近期阈值按书长自适应:千章网文保持原量级(~200/~50),40章短书自动缩到 10/5,
+        # 否则长线线程在短书里永远拿底分,被挤出上下文后规划器再也看不见(休眠死循环)
+        old_age = max(10, snapshot_chapter // 4)
+        recent_age = max(5, snapshot_chapter // 8)
         for m in open_m:
             age = snapshot_chapter - int(m['introduced_chapter'])
-            weight = 0.15 if m['thread_key'] in set(planned['advance'] + planned['maintain']) else (0.10 if age >= 200 else 0.04)
+            weight = 0.15 if m['thread_key'] in set(planned['advance'] + planned['maintain']) else (0.10 if age >= old_age else 0.04)
             add(m['thread_key'], 'mystery', weight, f'open mystery {m["mystery_key"]}, age={age}')
         for d in debts:
             age = snapshot_chapter - int(d['created_chapter'])
-            weight = 0.15 if d['thread_key'] in set(planned['advance'] + planned['maintain']) else (0.10 if age >= 200 else 0.04)
+            weight = 0.15 if d['thread_key'] in set(planned['advance'] + planned['maintain']) else (0.10 if age >= old_age else 0.04)
             add(d['thread_key'], 'emotion_debt', weight, f'open emotion debt {d["debt_key"]}, age={age}')
         for r in self.store.thread_stage_recency(snapshot_chapter, 100):
             age = snapshot_chapter - int(r['mc'] or 0)
-            if age <= 50:
+            if age <= recent_age:
                 add(r['thread_key'], 'recency', 0.05, f'thread callback {age} chapters ago')
 
         ranked = sorted(scores.items(), key=lambda kv: (-min(1.0, kv[1]['score']), kv[0]))[:limit]
@@ -482,8 +489,8 @@ class ContextCompiler:
         holder = self._pov_holder(cp, holder)
         snapshot_chapter = max(0, chapter - 1)
         max_tokens = int(max_tokens or ROLE_DEFAULT_TOKENS[role])
-        if max_tokens < 1000 or max_tokens > 64000:
-            raise ValueError('max_tokens must be between 1000 and 64000')
+        if max_tokens < 1000 or max_tokens > 256000:
+            raise ValueError('max_tokens must be between 1000 and 256000')
         recent_window = int(recent_window or (8 if role == 'writer' else 12))
         recent_window = max(1, min(recent_window, 50))
         excerpt_chars = int(500 if excerpt_chars is None and role == 'writer' else (0 if excerpt_chars is None else excerpt_chars))
@@ -557,6 +564,14 @@ class ContextCompiler:
                 context['rolling_window'] = self.planning.get_window(chapter, 50)
                 context['due_thread_schedule'] = self.planning.schedule_get(chapter=chapter, status='planned', limit=100)
                 context['milestones'] = self.planning.milestone_list(status='planned', limit=200)
+                # 伏笔销账台账(40 章实测 0/129 显式回收的根因修复):planner 必须能
+                # 看到未回收线索及其 callback_key,规则 11 的"原样引用"才有落点。
+                context['due_foreshadowing'] = [
+                    {'thread_key': c['thread_key'], 'thread_name': c.get('thread_name'), 'chapter': c['chapter'],
+                     'age': chapter - c['chapter'], 'callback_key': c.get('callback_key'),
+                     'content': (c.get('content') or '')[:60]}
+                    for c in self.store.open_clues(chapter - 1, 60)
+                ]
             else:
                 context['safety_contract'] = 'Reviewer may compare against Author Truth but must not echo hidden values into Writer-visible findings.'
 

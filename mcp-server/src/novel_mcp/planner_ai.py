@@ -25,7 +25,9 @@ def call_planner_model(context: dict[str, Any], model: str | None = None, timeou
 7. 上下文 blueprint.author_decisions 里已回答过的问题不得重复提问；仅在出现全新的必要设定分歧时才使用 author_questions。
 8. declared updates 各组必须严格符合返回结构中的形状（条目必须是对象，字段名不得自创）。belief_updates 只登记对已知 world fact 的信念变化：{"fact_key","holder","chapter","stance","value"}；events 条目必须含 "name"（可选 event_key/participants/outcome）；payoffs 条目必须含 "content" 且带 debt_key 或 thread_key。无法归入标准形状的观察写进 summary 或 chapter_hook，绝不塞进 updates。
 9. 形状契约(与系统校验器完全一致,不合规计划会被阻止):threads 用 thread_key;world_facts 用 fact_key+truth;entities 用 entity_key+entity_type+name;character_states 用 character_key(不是 entity_key)+state;entity_attributes 用 entity_key+attr_key+value;entity_relations 用 source_entity_key+relation_type+target_entity_key。
-10. 输出只能是 JSON 对象，不输出 Markdown 或解释。
+10. dormant_threads 非空时:每章至少把其中一条排进 threads.advance/maintain(或在 author_questions 中说明为何继续搁置);不允许全部长期沉睡。aging_debts 非空时:优先安排其中最老债务的偿还(payoffs,resolution 可为 partial)。
+11. 伏笔销账纪律:payoffs 若兑现 due_foreshadowing 中的任一线索,callback_key 必须原样取该线索的 callback_key;不引用则形式台账永远无法销账。
+12. 输出只能是 JSON 对象，不输出 Markdown 或解释。
 
 返回结构：
 {
@@ -40,7 +42,7 @@ def call_planner_model(context: dict[str, Any], model: str | None = None, timeou
   "reveals":[{"fact_key":"...","thread_key":"...","content":"本章揭示内容的作者层摘要","recipients":["reader"],"scope":"partial|major"}],
   "belief_updates":[{"fact_key":"已存在的fact_key","holder":"reader或角色key","chapter":1,"stance":"unknown|suspects|believes|confirmed|disbelieves","value":"可选"}],
   "emotion_debts":[{"debt_key":"...","thread_key":"...","name":"...","emotion_type":"...","intensity":0.5,"created_chapter":1}],
-  "payoffs":[{"debt_key":"...","content":"...","resolution":"partial|full","callback_key":"可选,指向所回收线索的callback_key"}],
+  "payoffs":[{"debt_key":"...","content":"...","resolution":"partial|full","callback_key":"兑现 due_foreshadowing 中线索时必填(原样取该线索 callback_key);与既有线索无关的兑现可省略"}],
   "events":[{"name":"...","event_key":"可选稳定key","participants":[{"entity_key":"...","participant_role":"..."}],"outcome":"可选"}],
   "character_states":[{"character_key":"hero","state":{"alive":true,"location":"...","realm":"...","note":"本章后的角色状态"}}],
   "character_states":[],

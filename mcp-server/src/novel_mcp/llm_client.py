@@ -18,7 +18,7 @@ import urllib.request
 from typing import Any
 
 DEFAULT_OPENAI_BASE = 'https://api.openai.com/v1'
-DEFAULT_MAX_TOKENS = 16384
+DEFAULT_MAX_TOKENS = 32768
 _ANTHROPIC_VERSION = '2023-06-01'
 
 
@@ -197,6 +197,13 @@ def chat_json(system_prompt: str, user_prompt: str, *, prefix: str,
               fallback_prefixes: tuple[str, ...] | str | None = None, model: str | None = None,
               temperature: float = 0.2, max_tokens: int | None = None,
               timeout: int = 240) -> tuple[dict[str, Any], str]:
-    text, used = chat(system_prompt, user_prompt, prefix=prefix, fallback_prefixes=fallback_prefixes,
-                      model=model, temperature=temperature, json_mode=True, max_tokens=max_tokens, timeout=timeout)
-    return parse_json_object(text), used
+    # 解析失败(截断/夹带叙述)也重试:思考型模型偶发把 max_tokens 烧在 thinking 上,重试即恢复
+    last_exc: Exception | None = None
+    for _ in range(3):
+        text, used = chat(system_prompt, user_prompt, prefix=prefix, fallback_prefixes=fallback_prefixes,
+                          model=model, temperature=temperature, json_mode=True, max_tokens=max_tokens, timeout=timeout)
+        try:
+            return parse_json_object(text), used
+        except ValueError as exc:
+            last_exc = exc
+    raise last_exc or ValueError('model did not return a JSON object')
