@@ -566,6 +566,9 @@ class ContextCompiler:
                 context['milestones'] = self.planning.milestone_list(status='planned', limit=200)
                 # 伏笔销账台账(40 章实测 0/129 显式回收的根因修复):planner 必须能
                 # 看到未回收线索及其 callback_key,规则 11 的"原样引用"才有落点。
+                directive = self.service.chapter_directive_get(chapter)
+                if directive:
+                    context['author_directive'] = directive['directive']
                 context['due_foreshadowing'] = [
                     {'thread_key': c['thread_key'], 'thread_name': c.get('thread_name'), 'chapter': c['chapter'],
                      'age': chapter - c['chapter'], 'callback_key': c.get('callback_key'),

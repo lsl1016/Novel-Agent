@@ -65,6 +65,7 @@ PLANNER_TOOLS = REVIEWER_TOOLS | {
     'entity_relation_end', 'narrative_entity_link', 'entity_graph_import',
     'identity_profile_set', 'event_create', 'assertion_create', 'assertion_resolve',
     'candidate_promote', 'candidate_reject', 'fact_disclosure_set', 'fact_disclosures_get',
+    'chapter_directive_set', 'chapter_direction_propose',
 }
 
 CONTROLLER_TOOLS = {
@@ -72,6 +73,7 @@ CONTROLLER_TOOLS = {
     'novel_run_pause', 'novel_run_resume', 'novel_run_report',
     'novel_run_decision_list', 'novel_run_decision_submit',
     'chapter_finalize',
+    'chapter_directive_set',
     'story_get_state', 'writing_workflow_status', 'chapter_plan_get', 'chapter_review_get',
     'story_pressure_check', 'planning_pressure_check',
 }

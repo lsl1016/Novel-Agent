@@ -88,7 +88,7 @@ def test_stdio_tools_list_and_call(tmp_path,monkeypatch):
     import novel_mcp.runtime as rt
     rt._SERVICE=None
     out=handle({'jsonrpc':'2.0','id':1,'method':'tools/list','params':{}})
-    assert len(out['result']['tools'])==92
+    assert len(out['result']['tools'])==94
     out=handle({'jsonrpc':'2.0','id':2,'method':'tools/call','params':{'name':'story_get_state','arguments':{'chapter':1}}})
     assert 'structuredContent' in out['result']
 

@@ -27,7 +27,8 @@ def call_planner_model(context: dict[str, Any], model: str | None = None, timeou
 9. 形状契约(与系统校验器完全一致,不合规计划会被阻止):threads 用 thread_key;world_facts 用 fact_key+truth;entities 用 entity_key+entity_type+name;character_states 用 character_key(不是 entity_key)+state;entity_attributes 用 entity_key+attr_key+value;entity_relations 用 source_entity_key+relation_type+target_entity_key。
 10. dormant_threads 非空时:每章至少把其中一条排进 threads.advance/maintain(或在 author_questions 中说明为何继续搁置);不允许全部长期沉睡。aging_debts 非空时:优先安排其中最老债务的偿还(payoffs,resolution 可为 partial)。
 11. 伏笔销账纪律:payoffs 若兑现 due_foreshadowing 中的任一线索,callback_key 必须原样取该线索的 callback_key;不引用则形式台账永远无法销账。
-12. 输出只能是 JSON 对象，不输出 Markdown 或解释。
+12. 作者导演指令:若上下文含 author_directive,它是作者对本章的强制意志——primary_goal、情节要点与线程安排必须落实它;若与蓝图硬约束冲突,遵守硬约束并把冲突写进 author_questions 请作者裁决。
+13. 输出只能是 JSON 对象，不输出 Markdown 或解释。
 
 返回结构：
 {

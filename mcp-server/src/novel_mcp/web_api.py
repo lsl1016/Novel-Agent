@@ -58,7 +58,7 @@ READ_ROLES = {
 
 # 慢操作白名单(分钟级 LLM 调用,走作业执行器;权限仍按角色白名单)
 JOB_TOOLS = frozenset({
-    'novel_architecture_generate', 'story_architect_apply', 'chapter_plan_generate', 'chapter_semantic_review',
+    'novel_architecture_generate', 'story_architect_apply', 'chapter_plan_generate', 'chapter_direction_propose', 'chapter_semantic_review',
     'chapter_review_full', 'chapter_auto_revise', 'chapter_auto_revision_loop',
     'chapter_draft_generate',
 })
@@ -338,6 +338,26 @@ class Handler(BaseHTTPRequestHandler):
             return
         name = path[len('/api/v1/actions/'):].strip('/')
         headers = {k.lower(): v for k, v in self.headers.items()}
+        book = body.pop('book', None) if isinstance(body, dict) else None
+        if book:
+            # book 作用域动作:与 facade_call 同一道 tool_allowed 闸门,
+            # 仅把分发目标从默认书单例换成多书服务实例。
+            role, err = self._role()
+            if err != 0:
+                self._json(401, {'errNo': 40101, 'errMsg': 'unauthorized', 'data': None}); return
+            ok, reason = auth.tool_allowed(role, name, body)
+            if not ok:
+                self._json(200, {'errNo': 40301, 'errMsg': f'role {role} denied: {reason}', 'data': None}); return
+            try:
+                data = getattr(service_for(book), name)(**body)
+                out = (200, {'errNo': 0, 'errMsg': 'success', 'data': data})
+            except KeyError as e:
+                out = (200, {'errNo': 40401, 'errMsg': str(e), 'data': None})
+            except (TypeError, ValueError) as e:
+                out = (200, {'errNo': 40001, 'errMsg': str(e), 'data': None})
+            except Exception as e:
+                out = (200, {'errNo': 50001, 'errMsg': str(e), 'data': None})
+            self._json(out[0], out[1]); return
         status, out = facade_call(name, body, headers)  # 权限/闸门/校验全部在既有路径里
         self._json(status, out)
 

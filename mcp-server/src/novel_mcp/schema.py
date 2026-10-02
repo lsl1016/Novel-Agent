@@ -294,6 +294,16 @@ INSERT OR IGNORE INTO fact_disclosures(fact_key,holder,known_from_chapter,source
     (5, 'v0.10.1 explicit foreshadowing callbacks', r'''
 UPDATE stages SET callback_key='stage_'||id WHERE stage_type IN ('Clue','Foreshadowing') AND callback_key IS NULL;
 '''),
+    (6, 'v0.11 chapter directives (director steering)', r'''
+CREATE TABLE IF NOT EXISTS chapter_directives (
+  chapter INTEGER PRIMARY KEY,
+  directive TEXT NOT NULL,
+  source TEXT NOT NULL DEFAULT 'author',
+  status TEXT NOT NULL DEFAULT 'pending',
+  created_at TEXT NOT NULL DEFAULT (datetime('now')),
+  consumed_at TEXT
+);
+'''),
 ]
 
 LATEST_VERSION = MIGRATIONS[-1][0]

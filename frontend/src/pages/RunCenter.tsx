@@ -3,6 +3,7 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api, sseUrl } from '../api/client'
 import { ActionButton, Card, Modal, Pill, useToast } from '../components/ui'
+import { DirectorDecisions, StartRunCard } from '../components/Director'
 import { useSession } from '../stores/session'
 
 const PHASES = ['run', 'plan', 'draft', 'review', 'revise', 'commit']
@@ -26,7 +27,7 @@ function DecisionQueue({ runId }: { runId: string }) {
   const push = useToast((s) => s.push)
   const qc = useQueryClient()
   const { data } = useQuery({ queryKey: ['run', runId], queryFn: () => api.get(`/api/v1/runs/${runId}`), refetchInterval: 8000 })
-  const open = (data?.open_decisions || []).filter((d: any) => d.status === 'open')
+  const open = (data?.open_decisions || []).filter((d: any) => d.status === 'open' && !['steering_point', 'plan_approval'].includes(d.decision_type))
   if (!open.length) return null
 
   async function submit() {
@@ -175,10 +176,12 @@ function LiveMonitor({ runId }: { runId: string }) {
 export default function RunCenter() {
   const { runId } = useParams()
   const navigate = useNavigate()
+  const qc2 = useQueryClient()
   const { data } = useQuery({ queryKey: ['runs'], queryFn: () => api.get('/api/v1/runs') })
   const runs = data?.runs || []
   const active = runId || runs[0]?.run_id
   const { data: detail } = useQuery({ queryKey: ['run', active], queryFn: () => api.get(`/api/v1/runs/${active}`), enabled: !!active })
+  const noLiveRun = !runs.some((r: any) => ['running', 'paused', 'needs_author_decision'].includes(r.status))
 
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '262px 1fr', gap: 14 }}>
@@ -202,6 +205,10 @@ export default function RunCenter() {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         {active ? (
           <>
+            {noLiveRun && <StartRunCard />}
+            <DirectorDecisions runId={active}
+              decisions={(detail?.open_decisions || []).filter((d: any) => d.status === 'open')}
+              onDone={() => { qc2.invalidateQueries({ queryKey: ['run', active] }); qc2.invalidateQueries({ queryKey: ['runs'] }) }} />
             <DecisionQueue runId={active} />
             <LiveMonitor runId={active} />
             {detail && (
@@ -233,7 +240,10 @@ export default function RunCenter() {
             )}
           </>
         ) : (
-          <Card><span style={{ color: 'var(--muted)' }}>尚无运行记录 —— 可经 CLI(scripts/stress/drive.py)或 MCP 工具 novel_run_start 启动长跑</span></Card>
+          <>
+            <StartRunCard />
+            <Card><span style={{ color: 'var(--muted)' }}>尚无运行记录 —— 上方直接启动,或经 CLI(scripts/stress/drive.py)/MCP novel_run_start</span></Card>
+          </>
         )}
       </div>
     </div>

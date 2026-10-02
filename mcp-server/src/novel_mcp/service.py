@@ -710,6 +710,7 @@ class NovelService:
             'arc_plan':ctx.get('arc_plan'),
             'rolling_window':ctx.get('rolling_window'),
             'due_thread_schedule':ctx.get('due_thread_schedule') or [],
+            'author_directive':ctx.get('author_directive'),
             # 40 章实测 0/129 显式回收的根因:此清单曾用默认 min_age=100,
             # 40 章规模内永远为空,planner 无从引用 callback_key。销账台账必须全量。
             'due_foreshadowing':self.foreshadowing_list_open(chapter, 0, 60),
@@ -757,10 +758,12 @@ class NovelService:
                         max_revision_rounds:int=3,require_semantic:bool=True,allow_warnings:bool=True,auto_extract:bool=False,
                         auto_plan:bool=True,stop_on_pressure:bool=True,pressure_risk_limit:int=4,report_every:int=10,
                         hard_horizon:int=5,medium_horizon:int=20,soft_horizon:int=50,planner_model:str|None=None,
-                        writer_model:str|None=None,reviewer_model:str|None=None,revision_model:str|None=None):
+                        writer_model:str|None=None,reviewer_model:str|None=None,revision_model:str|None=None,
+                        steering_mode:bool=False,plan_review:bool=False):
         return self.runs.start(start_chapter=start_chapter,target_chapter=target_chapter,target_arc_key=target_arc_key,max_chapters=max_chapters,
             max_revision_rounds=max_revision_rounds,require_semantic=require_semantic,allow_warnings=allow_warnings,auto_extract=auto_extract,
             auto_plan=auto_plan,stop_on_pressure=stop_on_pressure,pressure_risk_limit=pressure_risk_limit,report_every=report_every,
+            steering_mode=steering_mode,plan_review=plan_review,
             hard_horizon=hard_horizon,medium_horizon=medium_horizon,soft_horizon=soft_horizon,planner_model=planner_model,
             writer_model=writer_model,reviewer_model=reviewer_model,revision_model=revision_model)
 
@@ -1215,7 +1218,7 @@ class NovelService:
                 ctx = json.loads(d.pop('context_json') or 'null') or {}
             except Exception:
                 ctx = {}
-            d['context'] = {k: ctx.get(k) for k in ('reason', 'decision_type', 'traceback') if ctx.get(k) is not None}
+            d['context'] = {k: ctx.get(k) for k in ('reason', 'decision_type', 'traceback', 'plan', 'mode', 'chapter') if ctx.get(k) is not None}
             qs = ((ctx.get('plan_result') or {}).get('author_questions')) or []
             if isinstance(qs, list) and qs:
                 d['author_questions'] = [q if isinstance(q, str) else (q.get('question') or q.get('q') or '')
@@ -1473,3 +1476,72 @@ class NovelService:
                 'SELECT thread_key,name,thread_type,status,introduced_chapter,target_min,target_max FROM threads ORDER BY introduced_chapter').fetchall()]
         return {'chapter': at, 'arcs': arcs, 'milestones': milestones, 'thread_schedule': schedule,
                 'rolling_window': rolling, 'chapter_plans': plans, 'threads': threads}
+
+    # ---- 导演位(章节前人工引导,v0.11) ----
+
+    def chapter_directive_set(self, chapter: int, directive: str, source: str = 'author') -> dict:
+        """为第 N 章设置作者引导指令(空串清除)。指令注入 planner 上下文,
+        在该章计划生成成功后自动销账(consumed),不泄漏到后续章节。"""
+        ch = int(chapter)
+        if not str(directive or '').strip():
+            with self.store.connect() as db:
+                db.execute('DELETE FROM chapter_directives WHERE chapter=?', (ch,))
+            return {'ok': True, 'chapter': ch, 'cleared': True}
+        with self.store.connect() as db:
+            db.execute('''INSERT INTO chapter_directives(chapter,directive,source) VALUES(?,?,?)
+                          ON CONFLICT(chapter) DO UPDATE SET directive=excluded.directive,
+                          source=excluded.source, status='pending', consumed_at=NULL, created_at=CURRENT_TIMESTAMP''',
+                       (ch, str(directive).strip(), source))
+        return {'ok': True, 'chapter': ch, 'directive': str(directive).strip()}
+
+    def chapter_directive_get(self, chapter: int) -> dict | None:
+        with self.store.connect() as db:
+            r = db.execute("SELECT * FROM chapter_directives WHERE chapter=? AND status='pending'", (int(chapter),)).fetchone()
+        return dict(r) if r else None
+
+    def chapter_directive_consume(self, chapter: int) -> None:
+        with self.store.connect() as db:
+            db.execute("UPDATE chapter_directives SET status='consumed', consumed_at=CURRENT_TIMESTAMP WHERE chapter=? AND status='pending'", (int(chapter),))
+
+    def chapter_direction_propose(self, chapter: int, count: int = 3, focus: str = '') -> dict:
+        """导演位的共创模式:让模型基于当前故事状态提出 N 个下一章走向候选。
+
+        走 NOVEL_DIRECTOR_ → NOVEL_ARCHITECT_ → NOVEL_PLANNER_ 回退链
+        (architect 通常配直出快模型,提案 20-60 秒)。候选仅是提案,
+        作者选定/改写后才经 chapter_directive_set 成为正式指令。
+        """
+        if not 1 <= int(count) <= 5:
+            raise ValueError('count must be between 1 and 5')
+        ctx = self.planner_context_get(int(chapter))
+        state = {
+            'chapter': chapter,
+            'blueprint': ctx.get('blueprint'),
+            'current_arc': ctx.get('arc_plan'),
+            'story_state': ctx.get('story_state'),
+            'selected_threads': ctx.get('story_state', {}).get('selected_thread_keys'),
+            'due_thread_schedule': ctx.get('due_thread_schedule'),
+            'due_foreshadowing': ctx.get('due_foreshadowing'),
+            'dormant_threads': ctx.get('dormant_threads'),
+            'aging_debts': ctx.get('aging_debts'),
+            'rolling_window': ctx.get('rolling_window'),
+        }
+        from .llm_client import chat_json, configured
+        prefix = 'NOVEL_DIRECTOR'
+        if not configured(prefix, ('NOVEL_ARCHITECT', 'NOVEL_PLANNER')):
+            raise RuntimeError('Set NOVEL_DIRECTOR_/NOVEL_ARCHITECT_/NOVEL_PLANNER_ model config to propose directions')
+        system = (
+            '你是长篇小说的联合导演。基于当前故事状态,为下一章提出几个可走的走向候选。'
+            '每个候选必须:1) 与既有叙事线/谜团/情感债衔接(优先兑现到期义务、唤醒休眠线);'
+            '2) 有明确的冲突升级或信息推进,不是过渡章;3) 互不重叠,代表真正不同的取舍。'
+            '只输出 JSON 对象:{"options":[{"title":"8字内标题","sketch":"80字内走向概要",'
+            '"threads":["将推进的线程键"],"beats":["2-4个情节要点"],"risk":"该选择的代价/风险,40字内"}]}'
+        )
+        user = f'下一章是第 {chapter} 章。当前故事状态(JSON):\n{json.dumps(state, ensure_ascii=False, default=str)[:12000]}\n'
+        if str(focus or '').strip():
+            user += f'\n作者补充的关注点:{focus.strip()}\n'
+        user += f'\n提出 {int(count)} 个候选。'
+        obj, model = chat_json(system, user, prefix=prefix, fallback_prefixes=('NOVEL_ARCHITECT', 'NOVEL_PLANNER'), temperature=0.8)
+        options = obj.get('options') if isinstance(obj, dict) else None
+        if not isinstance(options, list) or not options:
+            raise ValueError('model did not return direction options')
+        return {'chapter': int(chapter), 'model': model, 'options': [o for o in options if isinstance(o, dict)][:int(count)]}

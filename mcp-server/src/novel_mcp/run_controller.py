@@ -15,6 +15,8 @@ DEFAULT_CONFIG = {
     'auto_extract': False,
     'auto_plan': True,
     'stop_on_pressure': True,
+    'steering_mode': False,
+    'plan_review': False,
     'pressure_risk_limit': 4,
     'report_every': 10,
     'hard_horizon': 5,
@@ -142,6 +144,8 @@ class NovelRunController:
         patch = resolution.get('config_patch') if isinstance(resolution.get('config_patch'), dict) else {}
         for k, v in patch.items():
             if k in SAFE_CONFIG_KEYS: cfg[k] = v
+        if row['decision_type'] == 'steering_point' and str(resolution.get('directive') or '').strip():
+            self.service.chapter_directive_set(int(row['chapter']), str(resolution['directive']), 'author')
         action = resolution.get('action', 'resume')
         if action == 'abort':
             self._update(run_id, status='cancelled', config=cfg, stop_reason={'code': 'AUTHOR_ABORTED', 'decision_id': decision_id})
@@ -183,6 +187,13 @@ class NovelRunController:
                 return {'code': 'TARGET_ARC_COMPLETED', 'target_arc_key': arc_key, 'target_end_chapter': arc['target_end_chapter']}
         return None
 
+    def _decision_state(self, run_id: str, decision_type: str, chapter: int) -> str | None:
+        with self.story.connect() as db:
+            rows = db.execute(
+                "SELECT status FROM novel_run_decisions WHERE run_id=? AND decision_type=? AND chapter=? ORDER BY created_at DESC LIMIT 1",
+                (run_id, decision_type, int(chapter))).fetchall()
+        return rows[0]['status'] if rows else None
+
     def _ensure_window(self, chapter: int, cfg: dict[str, Any]) -> None:
         win = self.service.planning_get_window(chapter, 1)
         if not win.get('items'):
@@ -211,6 +222,18 @@ class NovelRunController:
                     {'risk_count': risk_count, 'pressure': pressure})
                 return {'ok': False, 'status': 'needs_author_decision', 'chapter': ch, 'decision': decision}
 
+        # 导演位(steering_mode):每章规划前暂停,等作者指令或 AI 提案
+        if cfg.get('steering_mode'):
+            state = self._decision_state(run_id, 'steering_point', ch)
+            if state is None:
+                decision = self._open_decision(run_id, ch, 'steering_point',
+                    f'第 {ch} 章待导演:输入本章引导指令,或让模型提案走向候选;留空则自动规划。',
+                    {'chapter': ch, 'last_committed': run.get('last_committed_chapter'), 'mode': 'steering'})
+                return {'ok': False, 'status': 'needs_author_decision', 'chapter': ch, 'decision': decision}
+            if state != 'resolved':
+                return {'ok': False, 'status': 'needs_author_decision', 'chapter': ch,
+                        'error': {'code': 'STEERING_PENDING'}}
+
         self._ensure_window(ch, cfg)
         try:
             cp = self.service.chapter_plan_get(ch)
@@ -230,6 +253,19 @@ class NovelRunController:
                 decision = self._open_decision(run_id, ch, 'chapter_plan_blocked', '自动生成的 ChapterPlan 被验证器阻止。请人工修改计划。', {'plan_result': generated})
                 return {'ok': False, 'status': 'needs_author_decision', 'chapter': ch, 'decision': decision}
             cp = generated.get('chapter_plan') or self.service.chapter_plan_get(ch)
+        # 指令销账:计划已生成,导演指令完成使命,不泄漏到后续章节
+        self.service.chapter_directive_consume(ch)
+        # 计划审核位(plan_review):作者可查看/改写计划后再放行写作
+        if cfg.get('plan_review'):
+            state = self._decision_state(run_id, 'plan_approval', ch)
+            if state is None:
+                decision = self._open_decision(run_id, ch, 'plan_approval',
+                    f'第 {ch} 章计划已生成,待审核:可直接批准,或先经 chapter_plan_save 修改再批准。',
+                    {'plan': cp, 'mode': 'plan_review'})
+                return {'ok': False, 'status': 'needs_author_decision', 'chapter': ch, 'decision': decision}
+            if state != 'resolved':
+                return {'ok': False, 'status': 'needs_author_decision', 'chapter': ch,
+                        'error': {'code': 'PLAN_APPROVAL_PENDING'}}
         self._event(run_id, 'planning', 'ready', ch, {'plan_version': cp.get('version') if cp else None})
 
         wf = self.service.writing_workflow_status(ch)
