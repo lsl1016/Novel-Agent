@@ -12,3 +12,4 @@ frontend/node_modules/
 frontend/tsconfig.tsbuildinfo
 *.tsbuildinfo
 story-data/*.log
+story-data/story-*/

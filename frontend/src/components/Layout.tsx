@@ -9,31 +9,32 @@ const I = {
   home: '⌂', run: '▶', studio: '✎', wizard: '✦', world: '◈', board: '坪', planner: '◫', review: '✓', time: '⏱', gear: '⚙',
 }
 
-const NAV_SECTIONS: { sec: string; items: { to?: string; label: string; icon: string; ready?: boolean; author?: boolean }[] }[] = [
+const NAV_SECTIONS: { sec: string; items: { to?: string; label: string; icon: string; ready?: boolean; author?: boolean; create?: boolean }[] }[] = [
   { sec: '监控', items: [
     { to: '/', label: '项目主页', icon: I.home, ready: true },
     { to: '/runs', label: '运行中心', icon: I.run, ready: true },
   ]},
   { sec: '创作', items: [
+    { to: '/wizard', label: '开书向导', icon: I.wizard, ready: true, create: true },
     { to: '/studio/latest', label: '写作工作室', icon: I.studio, ready: true },
-    { label: '开书向导', icon: I.wizard },
   ]},
   { sec: '图谱', items: [
     { to: '/world', label: '世界观设定集', icon: I.world, ready: true, author: true },
     { to: '/board', label: '叙事看板', icon: I.board, ready: true, author: true },
-    { label: '规划器', icon: I.planner },
-    { label: '审校中心', icon: I.review },
+    { to: '/planner', label: '规划器', icon: I.planner, ready: true, author: true },
+    { to: '/reviews', label: '审校中心', icon: I.review, ready: true, author: true },
     { to: '/timeline', label: '时间线', icon: I.time, ready: true, author: true },
   ]},
-  { sec: '系统', items: [{ label: '设置', icon: I.gear }]},
+  { sec: '系统', items: [{ to: '/settings', label: '设置', icon: I.gear, ready: true }]},
 ]
 
 export default function Layout() {
-  const { role, logout } = useSession()
+  const { role, logout, book, setBook } = useSession()
   const navigate = useNavigate()
   const cursor = useCursor((s) => s.chapter)
   const setCursor = useCursor((s) => s.setChapter)
-  const { data: home } = useQuery({ queryKey: ['home-mini'], queryFn: () => api.get('/api/v1/home'), refetchInterval: 15000 })
+  const { data: home } = useQuery({ queryKey: ['home-mini', book], queryFn: () => api.get('/api/v1/home'), refetchInterval: 15000 })
+  const { data: booksData } = useQuery({ queryKey: ['books'], queryFn: () => api.get('/api/v1/books'), refetchInterval: 60000 })
   const run = home?.run
   const progress = home?.progress
   const latest = progress?.latest_chapter || 1
@@ -52,7 +53,7 @@ export default function Layout() {
           <div key={g.sec}>
             <div className="nav-sec">{g.sec}</div>
             {g.items.map((item) => {
-              const enabled = item.ready && (!item.author || role !== 'viewer')
+              const enabled = item.ready && (!item.author || role !== 'viewer') && (!item.create || role === 'planner' || role === 'admin')
               if (!enabled) {
                 return <div key={item.label} className="nav-item disabled" title="后续阶段提供"><span style={{ width: 14, textAlign: 'center', opacity: .6 }}>{item.icon}</span>{item.label}</div>
               }
@@ -73,7 +74,18 @@ export default function Layout() {
 
       <div style={{ display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
         <header style={{ display: 'flex', alignItems: 'center', gap: 16, padding: '10px 22px', borderBottom: '1px solid var(--line)', background: 'var(--panel)' }}>
-          <strong style={{ fontSize: 15, letterSpacing: '.02em' }}>{home?.book?.title || '未命名之书'}</strong>
+          {(booksData?.books?.length || 0) > 1 ? (
+            <select className="input" value={book || ''}
+              onChange={(e) => { setBook(e.target.value || null); useCursor.getState().setChapter(latest) }}
+              title="切换书库" style={{ fontWeight: 700, fontSize: 14.5, maxWidth: 190 }}>
+              {(booksData?.books || []).map((b: any) => {
+                const v = b.default ? '' : b.name.replace(/\.db$/, '')
+                return <option key={b.name} value={v}>{b.title}{b.chapters ? ` (${b.chapters}章)` : ''}</option>
+              })}
+            </select>
+          ) : (
+            <strong style={{ fontSize: 15, letterSpacing: '.02em' }}>{home?.book?.title || '未命名之书'}</strong>
+          )}
           {progress && (
             <span style={{ color: 'var(--muted)', fontSize: 12.5 }}>
               <b style={{ color: 'var(--sem-canon)' }}>{progress.committed_chapters}</b> 章 · {(progress.total_chars / 10000).toFixed(1)} 万字

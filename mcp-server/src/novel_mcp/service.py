@@ -11,6 +11,7 @@ from .world_model import WorldModel
 from .context_compiler import ContextCompiler
 from .writing import WritingStore, call_writer_model, overall_verdict
 from .planner_ai import call_planner_model, planner_model_configured
+from .architecture_check import check as _architecture_check
 from .run_controller import NovelRunController
 from .semantic_review import (
     SEMANTIC_REVIEWER_TYPES, call_semantic_reviewer, call_revision_model,
@@ -121,7 +122,7 @@ class NovelService:
         events=self.canon.recent_events(max(0,chapter-recent_window),chapter)
         beliefs=[s.belief_snapshot(f['fact_key'],chapter) for f in self.world.all_facts()]
         forbidden=self.world.forbidden_facts(chapter,'reader')
-        due=self.foreshadowing_list_open(chapter,100,20)
+        due=self.foreshadowing_list_open(chapter)
         return {'chapter':chapter,'current_arc':(ch.get('arc') if ch else s.get_meta('current_arc','')),'main_goal':s.get_meta('main_goal',''),'active_threads':active,'open_mysteries':mysteries,'emotion_debts':debts,'belief_states':beliefs,'forbidden_world_truths':forbidden,'due_foreshadowing':due,'recent_events':events,'character_states':self.canon.latest_character_states(chapter),'entity_graph':self.entity_graph.stats(),'planning':self.planning.planning_snapshot(chapter)}
     def narrative_thread_get(self,thread_key):
         x=self.store.thread(thread_key)
@@ -136,7 +137,13 @@ class NovelService:
             with self.store.connect() as db:
                 db.execute('UPDATE stages SET callback_key=? WHERE id=?',(f'stage_{sid}',sid))
         return {'ok':True,'stage_id':sid,'callback_key':callback_key or f'stage_{sid}','status':'clue','note':'not verified as Foreshadowing until an explicit later callback/payoff references this callback_key'}
-    def foreshadowing_list_open(self,before_chapter,min_age=100,limit=30):
+    def foreshadowing_due_min_age(self,before_chapter:int)->int:
+        # 伏笔"成熟"窗口按书长自适应:千章书仍允许慢热(封顶100章),短书按 chapter/8 缩短,
+        # 否则 min_age 恒为 100 时,任何短于 100 章的书里到期线索列表永远为空
+        return min(100, max(3, before_chapter // 8))
+    def foreshadowing_list_open(self,before_chapter,min_age:int|None=None,limit=40):
+        if min_age is None:
+            min_age=self.foreshadowing_due_min_age(before_chapter)
         rows=self.store.open_clues(before_chapter-min_age,limit)
         for r in rows: r['age']=before_chapter-r['chapter']
         return rows
@@ -244,6 +251,16 @@ class NovelService:
             'canonical_counts':counts,
         }
 
+    def novel_architecture_generate(self,idea:str,options:dict|None=None):
+        """一句话创意 → 完整 architecture(Phase C)。生成 ≠ 应用:产物仍须过 story_architect_apply。"""
+        from .architect_ai import generate, architect_model_configured
+        if not architect_model_configured():
+            return {'ok':False,'error':{'code':'ARCHITECT_NOT_CONFIGURED','message':'configure NOVEL_ARCHITECT_* or NOVEL_PLANNER_*'}}
+        try:
+            return generate(idea, options or {})
+        except Exception as exc:
+            return {'ok':False,'error':{'code':'ARCHITECT_FAILED','message':str(exc)}}
+
     def story_architect_apply(self,architecture:dict,dry_run:bool=False):
         """把作者提供的高层架构编译为权威的规划/故事状态。
 
@@ -274,6 +291,15 @@ class NovelService:
         for a in arcs:
             if isinstance(a,dict) and int(a.get('order_no',0) or 0)>0 and not a.get('inherited_thread_keys'):
                 warnings.append({'code':'ARC_WITHOUT_DECLARED_INHERITANCE','arc_key':a.get('arc_key')})
+        # 跨引用校验(Phase C):生成器与外部作者走同一道闸门;known 提供库内已有键避免增量误报
+        known={'threads':set(),'facts':set(),'entities':set(),'arcs':set()}
+        with self.store.connect() as db:
+            known['threads']={r[0] for r in db.execute('SELECT thread_key FROM threads')}
+            known['facts']={r[0] for r in db.execute('SELECT fact_key FROM world_facts')}
+            known['entities']={r[0] for r in db.execute('SELECT entity_key FROM entities')}
+            known['arcs']={r[0] for r in db.execute('SELECT arc_key FROM arc_plans')}
+        xref=_architecture_check(architecture,known=known)
+        errors.extend(xref['errors']); warnings.extend(xref['warnings'])
         if errors or dry_run:
             return {'ok':not errors,'dry_run':dry_run,'errors':errors,'warnings':warnings,'applied':{}}
         applied={k:0 for k in ['blueprint','world_facts','entities','entity_aliases','identity_profiles','entity_attributes','entity_relations','narrative_entity_links','threads','mysteries','emotion_debts','arcs','milestones','thread_schedule']}
@@ -395,12 +421,16 @@ class NovelService:
         transition=plan.get('arc_transition')
         if isinstance(transition,dict) and transition.get('is_new_arc') and not transition.get('inherited_thread_keys'):
             errors.append({'code':'ARC_WITHOUT_INHERITED_THREAD','message':'a new arc/map must inherit at least one existing NarrativeThread'})
-        # 叙事线兑现(payoff)窗口。
+        # 叙事线兑现(payoff)窗口与伏笔销账纪律。
         for p in plan.get('payoffs',[]) if isinstance(plan.get('payoffs'),list) else []:
             tk=p.get('thread_key') if isinstance(p,dict) else None
             if not tk:continue
             t=self.store.thread(tk)
             if t and t.get('target_min') is not None and chapter<int(t['target_min']): warnings.append({'code':'EARLY_PAYOFF','thread_key':tk,'message':f'planned payoff is before target_min {t["target_min"]}'})
+            if isinstance(p,dict) and not (p.get('callback_key') or '').strip():
+                open_on_thread=[c for c in self.store.open_clues(chapter,50) if c.get('thread_key')==tk]
+                if open_on_thread:
+                    warnings.append({'code':'PAYOFF_WITHOUT_CALLBACK','thread_key':tk,'message':f'thread has {len(open_on_thread)} open clue(s); set payoff callback_key to the recycled clue callback_key (e.g. {open_on_thread[0]["callback_key"]})'})
         # 规划运行时检查只作用于结构化的已保存计划,以保持向后兼容。
         if plan.get('_planning_runtime'):
             if not plan.get('primary_goal'): errors.append({'code':'CHAPTER_GOAL_MISSING','message':'structured ChapterPlan requires primary_goal'})
@@ -633,6 +663,26 @@ class NovelService:
 
     def geography_tree_get(self,root_entity_key:str,chapter:int,holder:str='reader',relation_types:list[str]|None=None,max_depth:int=4,limit:int=100):
         return self.entity_graph.geography_subtree(root_entity_key,chapter,holder,relation_types,max_depth,limit)
+    def dormant_threads(self,chapter:int,limit:int=8)->list[dict]:
+        """休眠线程清单:open 且最后登场距今超过自适应阈值(千章书~1/4书长,短书≥10章)。"""
+        old=max(10,chapter//4)
+        out=[]
+        for r in self.store.thread_stage_recency(chapter,200):
+            age=chapter-int(r['mc'] or 0)
+            if age>old:
+                t=self.store.thread(r['thread_key'])
+                if t and t.get('status')=='open':
+                    out.append({'thread_key':r['thread_key'],'name':t.get('name'),'dormant_for':age})
+            if len(out)>=limit:break
+        return out
+    def aging_debts(self,chapter:int,limit:int=8)->list[dict]:
+        """陈年情感债清单:未完全清偿且账龄超过自适应阈值,最老在前。"""
+        old=max(10,chapter//4)
+        rows=[d for d in self.store.open_debts() if chapter-int(d['created_chapter'])>=old]
+        rows.sort(key=lambda d:int(d['created_chapter']))
+        return [{'debt_key':d['debt_key'],'thread_key':d['thread_key'],'name':d['name'],
+                 'emotion_type':d.get('emotion_type'),'status':d['status'],
+                 'age':chapter-int(d['created_chapter'])} for d in rows[:limit]]
     def planner_context_get(self,chapter:int,recent_window:int=10):
         """由 v0.7 检索层编译的作者层规划上下文。"""
         compiled=self.context_compiler.compile(chapter,'planner','reader',max_tokens=24000,recent_window=recent_window,include_reference=True,persist=True)
@@ -660,6 +710,11 @@ class NovelService:
             'arc_plan':ctx.get('arc_plan'),
             'rolling_window':ctx.get('rolling_window'),
             'due_thread_schedule':ctx.get('due_thread_schedule') or [],
+            # 40 章实测 0/129 显式回收的根因:此清单曾用默认 min_age=100,
+            # 40 章规模内永远为空,planner 无从引用 callback_key。销账台账必须全量。
+            'due_foreshadowing':self.foreshadowing_list_open(chapter, 0, 60),
+            'dormant_threads':self.dormant_threads(chapter),
+            'aging_debts':self.aging_debts(chapter),
             'milestones':ctx.get('milestones') or [],
             'planning_pressure':ctx.get('planning_pressure'),
             'recent_chapters':ctx.get('recent_canon') or [],
@@ -812,6 +867,12 @@ class NovelService:
         if cp.get('validation_status')=='blocked':
             findings.append({'code':'CHAPTER_PLAN_BLOCKED','message':'saved plan is blocked'}); verdict='BLOCK'; score=0.0
         plan=cp.get('plan') or {}; updates=draft.get('declared_updates') or {}
+        # 章长纪律(40 章实测 25/40 低于目标 90%):确定性 WARN,让短章在审校面可见。
+        target=(self.planning.blueprint_get().get('blueprint') or {}).get('chapter_length_target')
+        body=draft.get('body') or ''
+        if isinstance(target,(int,float)) and int(target)>0 and len(body)<int(target)*0.9:
+            findings.append({'code':'SHORT_CHAPTER','actual':len(body),'target':int(target),'message':f'body is {len(body)} chars, below 90% of chapter_length_target {int(target)}'})
+            if verdict!='BLOCK': verdict='WARN'; score=min(score,0.85)
         intended=set(((plan.get('threads') or {}).get('advance') or []))
         actual=set()
         for key in ('clues','reveals','payoffs','events'):
@@ -1360,3 +1421,55 @@ class NovelService:
         if added:
             self.planning.blueprint_update({'author_decisions': qa})
         return self.runs.submit_decision(run_id, decision_id, {'action': 'resume'})
+
+    # ---- Web BFF 聚合读(Phase D3):审校中心 / 规划器 / 设置 ----
+
+    def web_reviews(self, from_chapter=None, to_chapter=None):
+        at = self.canon.max_committed_chapter() or 0
+        lo, hi = int(from_chapter or 1), int(to_chapter or max(at, 1))
+        with self.store.connect() as db:
+            rows = db.execute(
+                'SELECT chapter,draft_version,reviewer_type,verdict,score,findings_json,created_at '
+                'FROM chapter_reviews WHERE chapter BETWEEN ? AND ? ORDER BY chapter, draft_version, id', (lo, hi)).fetchall()
+        per_chapter: dict[int, list] = {}
+        for r in rows:
+            f = dict(r)
+            try:
+                findings = json.loads(f.pop('findings_json') or '[]') or []
+            except Exception:
+                findings = []
+            f['findings'] = [{'code': x.get('code'), 'message': (x.get('message') or '')[:100]}
+                             for x in findings if isinstance(x, dict)]
+            per_chapter.setdefault(f['chapter'], []).append(f)
+        # 修订收敛:同一章多版本的发现数序列
+        convergence = {}
+        for ch, revs in per_chapter.items():
+            versions = sorted({r['draft_version'] for r in revs})
+            if len(versions) > 1:
+                convergence[ch] = [{'version': v, 'findings': sum(len(r['findings']) for r in revs if r['draft_version'] == v)} for v in versions]
+        return {'from': lo, 'to': hi, 'chapters': [
+            {'chapter': ch, 'reviews': revs} for ch, revs in sorted(per_chapter.items())
+        ], 'convergence': convergence}
+
+    def web_plan(self, chapter=None):
+        at = self._web_at(chapter)
+        with self.store.connect() as db:
+            arcs = [dict(r) for r in db.execute('SELECT * FROM arc_plans ORDER BY order_no').fetchall()]
+            for a in arcs:
+                for src, dst in (('hidden_functions_json', 'hidden_functions'), ('allowed_reveals_json', 'allowed_reveals'),
+                                 ('forbidden_facts_json', 'forbidden_facts'), ('inherited_thread_keys_json', 'inherited_thread_keys'),
+                                 ('exit_conditions_json', 'exit_conditions')):
+                    a[dst] = jl(a.pop(src) or 'null') or []
+            milestones = [dict(r) for r in db.execute('SELECT * FROM planning_milestones ORDER BY min_chapter').fetchall()]
+            for m in milestones:
+                m['thread_keys'] = jl(m.pop('thread_keys_json') or 'null') or []
+                m['success_conditions'] = jl(m.pop('success_conditions_json') or 'null') or []
+            schedule = [dict(r) for r in db.execute('SELECT * FROM thread_schedule ORDER BY min_chapter').fetchall()]
+            rolling = [dict(r) for r in db.execute(
+                'SELECT chapter,arc_key,tier,status,primary_goal FROM rolling_plan_items WHERE chapter>=? ORDER BY chapter, tier', (max(1, at - 10),)).fetchall()]
+            plans = [dict(r) for r in db.execute(
+                'SELECT chapter,arc_key,status,validation_status,version FROM chapter_plans ORDER BY chapter').fetchall()]
+            threads = [dict(r) for r in db.execute(
+                'SELECT thread_key,name,thread_type,status,introduced_chapter,target_min,target_max FROM threads ORDER BY introduced_chapter').fetchall()]
+        return {'chapter': at, 'arcs': arcs, 'milestones': milestones, 'thread_schedule': schedule,
+                'rolling_window': rolling, 'chapter_plans': plans, 'threads': threads}

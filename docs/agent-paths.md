@@ -14,7 +14,7 @@
   MCP 传输(server.py / stdio_compat / http_compat)   NovelService 方法直调
         └──────────────────┬────────────────────────────┘
                            ▼
-                     NovelService(91 个工具的实现本体)
+                     NovelService(92 个工具的实现本体)
                            │
                            ├─ Context Compiler 编译角色上下文
                            │    ├─ planner 上下文(作者层,含 World Truth)
@@ -32,7 +32,7 @@
 
 ## 2. 工具的暴露方式(路径一专用)
 
-工具的单一事实源是 `mcp-server/src/novel_mcp/tooldefs.py`(91 个工具的名称 + JSON Schema);`runtime.call_tool(name, args)` 反射到 `NovelService` 同名方法——工具本质是 service 方法的 RPC 皮。三条传输:
+工具的单一事实源是 `mcp-server/src/novel_mcp/tooldefs.py`(92 个工具的名称 + JSON Schema);`runtime.call_tool(name, args)` 反射到 `NovelService` 同名方法——工具本质是 service 方法的 RPC 皮。三条传输:
 
 | 传输 | 入口 | 适用 |
 |---|---|---|
@@ -61,6 +61,7 @@
 | 规划 / 写作 / 审校 / 修订 / 提交 / Run 控制(≈25 工具) | ✅ 等效执行(进程内) | ✅ 逐工具调用 |
 | Reference Graph 结构学习 | ✅(planner 上下文自动携带 reference_patterns) | ✅ `narrative_pattern_search` |
 | 作者侧工具:实体/身份档案/断言/披露/候选晋升/世界真相编辑 | ❌ 不在自动路径(planner 不声明这些组) | ✅ 专属操作面 |
+| 一句话开书(架构生成 `novel_architecture_generate`) | ❌(开书是显式人工/agent 动作,不在无人值守路径) | ✅ planner/admin 白名单;推荐两步:生成 → 审阅 → `story_architect_apply` |
 | 正文由谁写 | 服务端配置的 writer 模型 | agent 自己(`chapter_draft_save(source='external')`)或内置模型 |
 
 ## 5. 外部 Agent 的三种用法

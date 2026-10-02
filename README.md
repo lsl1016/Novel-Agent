@@ -97,6 +97,23 @@ novel-story apply-architecture \
 
 `examples-architecture.json` 已包含世界事实、实体、实体属性、实体关系、叙事↔实体链接、叙事线、谜团、情感债、篇章、里程碑与日程。
 
+## 💡 一句话开书(Phase C)
+
+不想手写 architecture?给一句创意,四段式架构生成器(蓝图/真相 → 实体 → 叙事 → 结构)直接展开成完整可用的 architecture.json:
+
+```bash
+# 只生成 + 确定性校验,产物落盘 story-data/<slug>/(idea/architecture/validation/stages):
+PYTHONPATH=mcp-server/src python3 -m novel_mcp.cli create-from-idea \
+  --db story-data/my.db \
+  --idea "近未来都市悬疑:记忆质检员在被删记忆里发现同一个陌生人的求救信号,而删除指令是她自己签发的。" \
+  --target-chapters 300
+
+# 一键全链路(第三参 = 自动 apply 并长跑到第 N 章):
+./novel.sh new "近未来都市悬疑:记忆质检员在被删记忆里发现同一个陌生人的求救信号。" 300 3
+```
+
+生成 ≠ 应用:默认停在 dry-run 报告;`--apply` 显式过 `story_architect_apply`(与外部手写架构同一道跨引用闸门),`--run N` 再自动开跑。生成物跨引用(entity/thread/fact/arc)、窗口包含、揭示顺序、骨架覆盖率全部确定性校验,失败自动有界修复(≤3 轮)。MCP 侧等价工具:`novel_architecture_generate`(planner/admin 白名单)。
+
 ## ✍️ 长跑写作与导出
 
 配置好模型端点(`env/llm.env`,见 `scripts/stress/README.md`)后,**`./novel.sh` 一个入口搞定**(start 自动断点续跑并开启思考捕获,stop 无损停止):

@@ -1,5 +1,5 @@
 from __future__ import annotations
-import argparse,json
+import argparse,json,os,re,subprocess,sys,time
 from pathlib import Path
 from .store import StoryStore
 from .service import NovelService
@@ -7,6 +7,67 @@ from .service import NovelService
 
 def read_json(path):
     return json.loads(Path(path).read_text(encoding='utf-8'))
+
+
+def _load_env_file(path):
+    """加载 KEY=VALUE 环境文件(不覆盖已有变量);不存在则静默跳过。"""
+    p=Path(path)
+    if not p.exists(): return
+    for line in p.read_text(encoding='utf-8').splitlines():
+        line=line.strip()
+        if not line or line.startswith('#') or '=' not in line: continue
+        k,v=line.split('=',1)
+        os.environ.setdefault(k.strip(),v.strip())
+
+
+def _create_from_idea(a):
+    _load_env_file(a.env)
+    options={'target_total_chapters':a.target_chapters,'mode':'auto','heat':a.heat}
+    if a.genre: options['genre']=a.genre
+    if a.tone: options['tone']=a.tone
+    if a.counter_expectation: options['counter_expectation']=a.counter_expectation
+    svc=NovelService(a.db)
+    r=svc.novel_architecture_generate(a.idea,options)
+    if not r.get('ok'):
+        return {'ok':False,'stage':'generate','error':r.get('error') or r.get('validation')}
+    arch=r['architecture']
+    title=(arch.get('blueprint') or {}).get('title') or 'story'
+    slug=re.sub(r'[^0-9A-Za-z_-]+','-',title).strip('-') or ('story-'+time.strftime('%Y%m%d-%H%M%S'))
+    root=Path(a.db).resolve().parent
+    outdir=Path(a.out) if a.out else root/slug
+    result={'ok':True,'title':title,'assumptions':r.get('assumptions',[]),'repair_rounds':r.get('repair_rounds',0),
+            'validation_errors':r['validation']['errors'],'validation_warnings':r['validation']['warnings']}
+    if not a.json:
+        outdir.mkdir(parents=True,exist_ok=True)
+        (outdir/'idea.json').write_text(json.dumps({'idea':a.idea,'options':options,'assumptions':r.get('assumptions',[])},ensure_ascii=False,indent=2),encoding='utf-8')
+        (outdir/'architecture.json').write_text(json.dumps(arch,ensure_ascii=False,indent=2),encoding='utf-8')
+        (outdir/'validation.json').write_text(json.dumps({'validation':r['validation'],'repair_rounds':r.get('repair_rounds',0),'stages':list(r.get('stages',{}))},ensure_ascii=False,indent=2),encoding='utf-8')
+        stg=outdir/'stages'; stg.mkdir(exist_ok=True)
+        for sid,sx in (r.get('stages') or {}).items():
+            (stg/f'{sid}.json').write_text(json.dumps(sx,ensure_ascii=False,indent=2),encoding='utf-8')
+        result['artifact_dir']=str(outdir)
+    if a.apply:
+        dry=svc.story_architect_apply(arch,dry_run=True)
+        if not dry['ok']:
+            result['apply']={'ok':False,'errors':dry['errors']}; result['ok']=False; return result
+        ap=svc.story_architect_apply(arch)
+        result['apply']={'ok':True,'applied':ap.get('applied')}
+        first_arc=(arch.get('arcs') or [{}])[0]
+        svc.store.set_meta('title',title)
+        svc.store.set_meta('main_goal',(arch.get('blueprint') or {}).get('core_promise',''))
+        svc.store.set_meta('current_arc',first_arc.get('name',''))
+        if a.run:
+            with svc.store.connect() as db:
+                db.execute('PRAGMA wal_checkpoint(TRUNCATE)')  # 确保子进程看到全部已提交数据
+            drive=Path(__file__).resolve().parents[3]/'scripts'/'stress'/'drive.py'
+            if not drive.exists():
+                result['run']={'ok':False,'message':f'drive.py not found at {drive}; run manually'}
+            else:
+                print(f'[create-from-idea] apply 完成,启动长跑写到第 {a.run} 章...',file=sys.stderr)
+                rc=subprocess.call([sys.executable,str(drive),'--db',a.db,'--auto-answer',
+                                    '--target-chapter',str(a.run),'--report',str((outdir if not a.json else root)/'metrics.json')])
+                result['run']={'ok':rc==0,'exit_code':rc}
+    return result
 
 
 def main():
@@ -29,6 +90,7 @@ def main():
     p=sub.add_parser('run-decisions'); p.add_argument('--db',required=True); p.add_argument('--run-id',required=True); p.add_argument('--status',default='open')
     p=sub.add_parser('run-decision-submit'); p.add_argument('--db',required=True); p.add_argument('--run-id',required=True); p.add_argument('--decision-id',required=True); p.add_argument('--resolution',required=True,help='JSON string or path to JSON file')
     p=sub.add_parser('web'); p.add_argument('--db',default=None); p.add_argument('--host',default='127.0.0.1'); p.add_argument('--port',type=int,default=8080); p.add_argument('--static',default=None); p.add_argument('--reference-root',default=None); p.add_argument('--narrative-kg-root',dest='nkg_root',default=None)
+    p=sub.add_parser('create-from-idea'); p.add_argument('--db',required=True); p.add_argument('--idea',required=True); p.add_argument('--target-chapters',type=int,default=300); p.add_argument('--genre'); p.add_argument('--tone'); p.add_argument('--heat',choices=['低','中','高'],default='中'); p.add_argument('--counter-expectation',dest='counter_expectation'); p.add_argument('--env',default='env/llm.env',help='模型端点配置文件(不存在则跳过,依赖已有环境变量)'); p.add_argument('--out',default=None,help='产物目录,默认 story-data/<slug>'); p.add_argument('--apply',action='store_true',help='显式授权后过 story_architect_apply'); p.add_argument('--run',type=int,default=0,metavar='N',help='apply 后自动长跑写到第 N 章(需 --apply)'); p.add_argument('--json',action='store_true',help='仅打印 JSON,不落盘')
     a=ap.parse_args()
     if a.cmd=='init-story':
         s=StoryStore(a.db); s.set_meta('title',a.title); s.set_meta('main_goal',a.main_goal); s.set_meta('current_arc',a.current_arc)
@@ -36,6 +98,8 @@ def main():
             for x in read_json(a.world_facts):s.set_world_fact(x['fact_key'],x.get('truth'),x.get('secrecy','secret'),x.get('reveal_after'),x.get('notes',''))
         NovelService(a.db)
         out={'ok':True,'db':a.db,'title':a.title}
+    elif a.cmd=='create-from-idea':
+        out=_create_from_idea(a)
     elif a.cmd=='set-meta':
         s=StoryStore(a.db)
         try:v=json.loads(a.value)

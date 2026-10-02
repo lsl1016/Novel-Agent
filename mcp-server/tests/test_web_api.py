@@ -223,3 +223,57 @@ def test_decision_answer_route(tmp_path, monkeypatch):
             assert False
         except urllib.error.HTTPError as e:
             assert e.code == 403
+
+
+def test_d3_endpoints_books_jobs_settings_reviews_plan(tmp_path, monkeypatch):
+    monkeypatch.setenv('NOVEL_FACADE_TOKENS', 'viewer:vt,planner:pt')
+    monkeypatch.setenv('NOVEL_BOOKS_DIR', str(tmp_path / 'lib'))
+    (tmp_path / 'lib').mkdir()
+    svc, run_id = seed(tmp_path)
+    for base in start_server(tmp_path, svc):
+        # 书库:新建一本书并列出
+        st, out = post(base, '/api/v1/books', {'name': 'second'}, token='pt')
+        assert st == 200 and out['ok'] and out['name'] == 'second.db'
+        st, books = get(base, '/api/v1/books', token='vt')
+        assert st == 200 and {b['name'] for b in books['books']} >= {'second.db'}
+        # 作业执行器:未在白名单的工具 404;白名单工具权限由 auth 兜底
+        try:
+            post(base, '/api/v1/jobs/chapter_finalize', {}, token='pt')
+            assert False
+        except urllib.error.HTTPError as e:
+            assert e.code == 404
+        # viewer 不能发作业
+        try:
+            post(base, '/api/v1/jobs/chapter_plan_generate', {'args': {}}, token='vt')
+            assert False
+        except urllib.error.HTTPError as e:
+            assert e.code == 403
+        # 作业:对新建空书跑一个真实慢工具等价物(chapter_plan_generate 无模型会失败,
+        # 但作业机制本身应返回 job id 且状态可查)
+        st, out = post(base, '/api/v1/jobs/chapter_plan_generate', {'args': {'chapter': 1}, 'book': 'second'}, token='pt')
+        assert st == 200 and out['ok'] and out['job']['status'] == 'running'
+        jid = out['job']['id']
+        import time as _t
+        for _ in range(40):
+            st, job = get(base, f'/api/v1/jobs/{jid}', token='pt')
+            if job['status'] != 'running':
+                break
+            _t.sleep(0.1)
+        assert job['status'] in ('done', 'failed') and job['error'] is None or job['status'] == 'failed'
+        # 设置(viewer 403,planner 可见,密钥脱敏)
+        try:
+            get(base, '/api/v1/settings', token='vt')
+            assert False
+        except urllib.error.HTTPError as e:
+            assert e.code == 403
+        st, settings = get(base, '/api/v1/settings', token='pt')
+        assert st == 200 and 'models' in settings and 'writer' in settings['models']
+        # 审校聚合(空库无审校也应是 200)
+        st, revs = get(base, '/api/v1/reviews?from=1&to=9', token='pt')
+        assert st == 200 and isinstance(revs['chapters'], list)
+        # 规划聚合
+        st, plan = get(base, '/api/v1/plan', token='pt')
+        assert st == 200 and isinstance(plan['chapter_plans'], list)
+        # 导出
+        st, body = raw(base, '/api/v1/export/novel', token='vt')
+        assert st == 200 and '第一章' in body
