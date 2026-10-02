@@ -3,7 +3,9 @@
 按 ``{PREFIX}_*`` 环境变量解析端点(支持 fallback 前缀链),协议由
 ``NOVEL_LLM_PROTOCOL`` 或 ``{PREFIX}_PROTOCOL`` 指定,auto 时根据 base URL
 是否包含 ``/anthropic`` 判定。零第三方依赖;Anthropic 响应只拼接
-``type=='text'`` 的内容块(跳过 thinking 块)。
+``type=='text'`` 的内容块(跳过 thinking 块)。设置 ``NOVEL_THINKING_LOG``
+时,思考块(OpenAI 协议的 reasoning_content 同理)会追加写入该 JSONL 文件,
+用于观察模型的思考创作过程。
 """
 from __future__ import annotations
 
@@ -44,6 +46,42 @@ def configured(prefix: str, fallback_prefixes: tuple[str, ...] | str | None = No
     return bool(key and model)
 
 
+def _balanced_json_objects(text: str):
+    """按出现顺序产出 text 中每个平衡的 JSON 对象片段(尊重字符串与转义)。
+
+    模型偶尔在答案对象之后追加第二个对象或尾注;首尾截取(first{..last})
+    会跨对象边界产生 "Extra data"。这里逐字符扫描,逐个尝试解析。
+    """
+    pos = 0
+    while True:
+        start = text.find('{', pos)
+        if start < 0:
+            return
+        depth, in_str, esc = 0, False, False
+        for i in range(start, len(text)):
+            c = text[i]
+            if in_str:
+                if esc:
+                    esc = False
+                elif c == '\\':
+                    esc = True
+                elif c == '"':
+                    in_str = False
+                continue
+            if c == '"':
+                in_str = True
+            elif c == '{':
+                depth += 1
+            elif c == '}':
+                depth -= 1
+                if depth == 0:
+                    yield text[start:i + 1]
+                    pos = i + 1
+                    break
+        else:
+            return  # 扫到结尾仍不平衡:后面不会再有完整对象
+
+
 def parse_json_object(text: str) -> dict[str, Any]:
     text = (text or '').strip()
     if text.startswith('```'):
@@ -53,20 +91,39 @@ def parse_json_object(text: str) -> dict[str, Any]:
         obj = json.loads(text)
         if isinstance(obj, dict):
             return obj
-        raise ValueError('expected JSON object')
     except Exception:
-        start, end = text.find('{'), text.rfind('}')
-        if start >= 0 and end > start:
-            obj = json.loads(text[start:end + 1])
-            if isinstance(obj, dict):
-                return obj
-        raise ValueError('model did not return a JSON object')
+        pass
+    for candidate in _balanced_json_objects(text):
+        try:
+            obj = json.loads(candidate)
+        except Exception:
+            continue
+        if isinstance(obj, dict):
+            return obj
+    raise ValueError('model did not return a JSON object')
 
 
 def _max_tokens(prefix: str, default: int | None) -> int:
     if default is not None:
         return int(default)
     return int(os.environ.get(f'{prefix}_MAX_TOKENS') or DEFAULT_MAX_TOKENS)
+
+
+def _note_thinking(prefix: str, model: str, thinking: str, answer_preview: str = '') -> None:
+    """可选捕获思考型模型的思考过程,追加写 JSONL(NOVEL_THINKING_LOG 指定路径)。
+
+    未设置该环境变量时零开销;写日志失败不影响模型调用主流程。
+    """
+    path = os.environ.get('NOVEL_THINKING_LOG', '').strip()
+    if not path or not (thinking or '').strip():
+        return
+    try:
+        entry = {'ts': time.strftime('%Y-%m-%d %H:%M:%S'), 'role': prefix, 'model': model,
+                 'thinking': thinking, 'answer_preview': answer_preview[:400]}
+        with open(path, 'a', encoding='utf-8') as fh:
+            fh.write(json.dumps(entry, ensure_ascii=False) + '\n')
+    except OSError:
+        pass
 
 
 def chat(system_prompt: str, user_prompt: str, *, prefix: str,
@@ -93,7 +150,10 @@ def chat(system_prompt: str, user_prompt: str, *, prefix: str,
             payload['response_format'] = {'type': 'json_object'}
 
         def extract(data: dict[str, Any]) -> str:
-            return data['choices'][0]['message']['content']
+            msg = data['choices'][0]['message']
+            _note_thinking(prefix, model, msg.get('reasoning_content') or msg.get('reasoning') or '',
+                           msg.get('content') or '')
+            return msg['content']
     else:
         url = base.rstrip('/') + '/v1/messages'
         headers = {'x-api-key': key, 'Authorization': f'Bearer {key}',
@@ -105,7 +165,11 @@ def chat(system_prompt: str, user_prompt: str, *, prefix: str,
         }
 
         def extract(data: dict[str, Any]) -> str:
-            text = ''.join(b.get('text', '') for b in data.get('content', []) if isinstance(b, dict) and b.get('type') == 'text')
+            blocks = [b for b in data.get('content', []) if isinstance(b, dict)]
+            text = ''.join(b.get('text', '') for b in blocks if b.get('type') == 'text')
+            _note_thinking(prefix, model,
+                           '\n\n'.join(b.get('thinking') or '' for b in blocks if b.get('type') == 'thinking'),
+                           text)
             if not text.strip():
                 raise ValueError(f"no text block in response (stop_reason={data.get('stop_reason')}); increase {prefix}_MAX_TOKENS if using a thinking model")
             return text

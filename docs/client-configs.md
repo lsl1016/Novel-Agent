@@ -64,6 +64,8 @@ NOVEL_REVISION_MODEL=glm-4.5-air
 
 协议由 `NOVEL_LLM_PROTOCOL`(或 `{ROLE}_PROTOCOL`)指定,`auto`(默认)按 base URL 含 `/anthropic` 自动走 Anthropic Message 协议,否则 OpenAI 兼容——同一套配置可接任意 OpenAI 兼容端点,无需改代码。思考型模型需调大 `*_MAX_TOKENS`(默认 16384,thinking 块计入)与 `*_TIMEOUT`(参考 env/llm.env:planner 420s / writer 300s / reviewer 600s / revision 600s)。完整示例见 `env/llm.env`。
 
+可选观察开关:`NOVEL_THINKING_LOG=<jsonl路径>` 把思考型模型的 thinking 块(OpenAI 协议的 `reasoning_content` 同理)按行追加写入,供实时观察规划/审校的推理过程(`scripts/stress/watch.py --thinking`);未设置时零开销,进程启动时读取、跑到一半无法追加。
+
 ## HTTP 门面角色鉴权(V0.10,已从建议变为强制实现)
 
 ```bash
