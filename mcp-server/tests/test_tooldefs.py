@@ -4,7 +4,7 @@ sys.path.insert(0,str(Path(__file__).resolve().parents[1]/'src'))
 from novel_mcp.tooldefs import TOOLS
 
 def test_tools_are_stable_and_valid():
-    assert len(TOOLS)==91
+    assert len(TOOLS)==92
     names=[x['name'] for x in TOOLS]
     assert len(names)==len(set(names))
     assert names[:14]==[
@@ -16,22 +16,22 @@ def test_tools_are_stable_and_valid():
     assert names[30:36]==[
       'entity_retrieve_relevant','narrative_retrieve_relevant','context_compile','context_preview','context_snapshot_get','context_explain'
     ]
-    assert names[36:52]==[
-      'blueprint_get','blueprint_update','story_architect_get','story_architect_apply','arc_plan_create','arc_plan_get','arc_progress_get','milestone_create','milestone_list','thread_schedule_update','thread_schedule_get','planning_rebuild_window','planning_get_window','chapter_plan_save','chapter_plan_get','planning_pressure_check'
+    assert names[36:53]==[
+      'blueprint_get','blueprint_update','story_architect_get','story_architect_apply','novel_architecture_generate','arc_plan_create','arc_plan_get','arc_progress_get','milestone_create','milestone_list','thread_schedule_update','thread_schedule_get','planning_rebuild_window','planning_get_window','chapter_plan_save','chapter_plan_get','planning_pressure_check'
     ]
-    assert names[52:63]==[
+    assert names[53:64]==[
       'planner_context_get','chapter_plan_generate','novel_run_start','novel_run_step','novel_run_continue','novel_run_status','novel_run_pause','novel_run_resume','novel_run_report','novel_run_decision_list','novel_run_decision_submit'
     ]
-    assert names[63:76]==[
+    assert names[64:77]==[
       'writer_context_get','chapter_draft_generate','chapter_draft_save','chapter_draft_get','chapter_review_all','chapter_review_get','chapter_revision_context_get','writing_workflow_status','chapter_finalize',
       'chapter_semantic_review','chapter_review_full','chapter_auto_revise','chapter_auto_revision_loop'
     ]
-    assert names[76:86]==[
+    assert names[77:87]==[
       'candidate_list','candidate_promote','candidate_reject',
       'identity_profile_set','event_create','event_get','event_timeline',
       'assertion_create','assertion_list','assertion_resolve'
     ]
-    assert names[86:]==[
+    assert names[87:]==[
       'fact_disclosure_set','fact_disclosures_get','power_context_get',
       'artifact_history_get','geography_tree_get'
     ]
