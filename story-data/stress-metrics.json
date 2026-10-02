@@ -1,26 +1,29 @@
 {
-  "chapters_committed": 10,
-  "total_chars": 19613,
-  "avg_chars_per_chapter": 1961.3,
+  "chapters_committed": 33,
+  "total_chars": 61779,
+  "avg_chars_per_chapter": 1872.1,
   "review": {
-    "total_review_records": 88,
-    "block_count": 1,
-    "block_rate": 0.0114,
+    "total_review_records": 280,
+    "block_count": 2,
+    "block_rate": 0.0071,
     "knowledge_leak_blocks": 0,
     "by_reviewer": {
-      "character:PASS": 11,
-      "continuity:PASS": 11,
-      "knowledge_leak:PASS": 11,
-      "narrative:PASS": 11,
-      "semantic_character:PASS": 5,
-      "semantic_character:WARN": 6,
-      "semantic_knowledge_leak:PASS": 1,
-      "semantic_knowledge_leak:WARN": 10,
-      "semantic_narrative:BLOCK": 1,
-      "semantic_narrative:PASS": 1,
-      "semantic_narrative:WARN": 9,
-      "semantic_pacing:PASS": 2,
-      "semantic_pacing:WARN": 9
+      "character:PASS": 17,
+      "character:WARN": 18,
+      "continuity:PASS": 17,
+      "continuity:WARN": 18,
+      "knowledge_leak:PASS": 35,
+      "narrative:PASS": 33,
+      "narrative:WARN": 2,
+      "semantic_character:PASS": 15,
+      "semantic_character:WARN": 20,
+      "semantic_knowledge_leak:PASS": 6,
+      "semantic_knowledge_leak:WARN": 29,
+      "semantic_narrative:BLOCK": 2,
+      "semantic_narrative:PASS": 3,
+      "semantic_narrative:WARN": 30,
+      "semantic_pacing:PASS": 5,
+      "semantic_pacing:WARN": 30
     }
   },
   "revision_rounds": {
@@ -33,17 +36,45 @@
     "7": 0,
     "8": 0,
     "9": 0,
-    "10": 0
+    "10": 0,
+    "11": 0,
+    "12": 0,
+    "13": 0,
+    "14": 0,
+    "15": 0,
+    "16": 0,
+    "17": 0,
+    "18": 0,
+    "19": 0,
+    "20": 0,
+    "21": 0,
+    "22": 0,
+    "23": 0,
+    "24": 0,
+    "25": 1,
+    "26": 0,
+    "27": 0,
+    "28": 0,
+    "29": 0,
+    "30": 0,
+    "31": 0,
+    "32": 0,
+    "33": 0
   },
-  "avg_revision_rounds": 0.1,
+  "avg_revision_rounds": 0.06,
   "human_interventions": {
-    "resolved": 10
+    "resolved": 39
   },
   "runs": [
     {
       "run_id": "run_c4373633619b4870",
       "status": "completed",
       "committed": 10
+    },
+    {
+      "run_id": "run_73db4108b1254164",
+      "status": "running",
+      "committed": 23
     }
   ],
   "context_growth": {
@@ -87,9 +118,101 @@
       [
         10,
         9886
+      ],
+      [
+        11,
+        9360
+      ],
+      [
+        12,
+        9540
+      ],
+      [
+        13,
+        9472
+      ],
+      [
+        14,
+        9824
+      ],
+      [
+        15,
+        9603
+      ],
+      [
+        16,
+        9869
+      ],
+      [
+        17,
+        10100
+      ],
+      [
+        18,
+        10016
+      ],
+      [
+        19,
+        10238
+      ],
+      [
+        20,
+        10107
+      ],
+      [
+        21,
+        10015
+      ],
+      [
+        22,
+        10132
+      ],
+      [
+        23,
+        10659
+      ],
+      [
+        24,
+        10552
+      ],
+      [
+        25,
+        10678
+      ],
+      [
+        26,
+        9553
+      ],
+      [
+        27,
+        10857
+      ],
+      [
+        28,
+        10909
+      ],
+      [
+        29,
+        11307
+      ],
+      [
+        30,
+        11367
+      ],
+      [
+        31,
+        11592
+      ],
+      [
+        32,
+        11790
+      ],
+      [
+        33,
+        11106
       ]
     ],
-    "tokens_per_chapter_slope": 423.81,
+    "tokens_per_chapter_slope": 107.27,
     "interpretation": "slope 明显为正 => Writer 上下文随章节线性增长,需要校准预算/检索"
   },
   "threads": {
@@ -98,41 +221,41 @@
       {
         "thread_key": "t_lineage",
         "last_stage_chapter": 4,
-        "dormant_for": 6,
+        "dormant_for": 29,
         "stage_count": 1
-      },
-      {
-        "thread_key": "t_sect_plot",
-        "last_stage_chapter": 6,
-        "dormant_for": 4,
-        "stage_count": 1
-      },
-      {
-        "thread_key": "t_master_promise",
-        "last_stage_chapter": 10,
-        "dormant_for": 0,
-        "stage_count": 13
       },
       {
         "thread_key": "t_rivalry",
-        "last_stage_chapter": 10,
+        "last_stage_chapter": 19,
+        "dormant_for": 14,
+        "stage_count": 35
+      },
+      {
+        "thread_key": "t_master_promise",
+        "last_stage_chapter": 33,
         "dormant_for": 0,
-        "stage_count": 21
+        "stage_count": 31
+      },
+      {
+        "thread_key": "t_sect_plot",
+        "last_stage_chapter": 33,
+        "dormant_for": 0,
+        "stage_count": 55
       },
       {
         "thread_key": "t_sword",
-        "last_stage_chapter": 10,
+        "last_stage_chapter": 33,
         "dormant_for": 0,
-        "stage_count": 26
+        "stage_count": 95
       }
     ]
   },
   "mysteries": {
     "open": 3,
     "resolved": 0,
-    "oldest_open_age": 9
+    "oldest_open_age": 32
   },
-  "unresolved_clues": 7,
-  "open_emotion_debts": 14,
-  "oldest_open_debt_age": 9
+  "unresolved_clues": 104,
+  "open_emotion_debts": 45,
+  "oldest_open_debt_age": 32
 }
