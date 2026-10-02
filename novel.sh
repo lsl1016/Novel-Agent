@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
 # Novel Agent 长跑写作一键入口 —— 用法: ./novel.sh <命令>
+#   new "创意" [目标章数] [跑到第N章]
+#              一句话开书:创意 → 架构生成(落盘 story-data/<slug>/)
+#              给第三参则 --apply 并自动长跑到第 N 章(如 ./novel.sh new "创意" 300 3)
 #   start [N]  启动/断点续跑长跑(默认写到第 40 章;自动开思考捕获)
 #   stop       停止长跑(已提交章节无损,下次 start 自动续跑)
 #   status     看进度:进程/run 状态/章数字数/最近章节
@@ -119,7 +122,25 @@ cmd_smoke() {
   python3 scripts/stress/smoke.py --auto-answer "$@"
 }
 
+cmd_new() {
+  local idea="${1:-}"; shift || true
+  local target="${1:-300}" run="${2:-0}"
+  if [[ -z "$idea" ]]; then
+    echo '用法: ./novel.sh new "一句话创意" [目标章数] [自动跑到第N章]'
+    echo '示例: ./novel.sh new "修鞋匠发现每双鞋都记录着穿鞋人的秘密" 300 3'
+    exit 1
+  fi
+  local db="story-data/idea-$(date +%Y%m%d-%H%M%S).db"
+  local extra=()
+  if (( run > 0 )); then extra=(--apply --run "$run"); fi
+  echo "[new] 一句话开书 → $db (目标 ${target} 章${run:+, 本次跑到第 ${run} 章})"
+  PYTHONPATH=mcp-server/src python3 -m novel_mcp.cli create-from-idea \
+    --db "$db" --idea "$idea" --target-chapters "$target" ${extra[@]+"${extra[@]}"}
+  echo "[new] 完成后: ./novel.sh start(续跑) | 产物在 story-data/<slug>/"
+}
+
 case "${1:-help}" in
+  new)     shift || true; cmd_new "$@" ;;
   start)   shift || true; cmd_start "$@" ;;
   stop)    cmd_stop ;;
   status)  cmd_status ;;

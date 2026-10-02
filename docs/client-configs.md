@@ -48,7 +48,7 @@ novel-mcp-http --host 127.0.0.1 --port 8765
 
 ## 模型端点配置(V0.10)
 
-四个角色独立路由,每个角色支持 `BASE_URL / API_KEY / MODEL / TEMPERATURE / MAX_TOKENS / TIMEOUT` 六个变量,取值链:`NOVEL_{ROLE}_*` → `NOVEL_WRITER_*` → `NKG_LLM_*`:
+五个角色独立路由,每个角色支持 `BASE_URL / API_KEY / MODEL / TEMPERATURE / MAX_TOKENS / TIMEOUT` 六个变量,取值链:`NOVEL_{ROLE}_*` → `NOVEL_WRITER_*` → `NKG_LLM_*`(ARCHITECT 例外,回退 PLANNER):
 
 ```bash
 NOVEL_PLANNER_BASE_URL=...      # 作者层 Chapter Planner(建议思考型模型)
@@ -60,6 +60,8 @@ NOVEL_REVIEWER_BASE_URL=...     # 语义审校(建议思考型;不配则语义�
 NOVEL_REVIEWER_MODEL=glm-4.6
 NOVEL_REVISION_BASE_URL=...     # 自动修订 Writer
 NOVEL_REVISION_MODEL=glm-4.5-air
+NOVEL_ARCHITECT_BASE_URL=...    # 一句话开书的架构生成器(可选;不配回退用 PLANNER 组)
+NOVEL_ARCHITECT_MODEL=glm-4.6
 ```
 
 协议由 `NOVEL_LLM_PROTOCOL`(或 `{ROLE}_PROTOCOL`)指定,`auto`(默认)按 base URL 含 `/anthropic` 自动走 Anthropic Message 协议,否则 OpenAI 兼容——同一套配置可接任意 OpenAI 兼容端点,无需改代码。思考型模型需调大 `*_MAX_TOKENS`(默认 16384,thinking 块计入)与 `*_TIMEOUT`(参考 env/llm.env:planner 420s / writer 300s / reviewer 600s / revision 600s)。完整示例见 `env/llm.env`。

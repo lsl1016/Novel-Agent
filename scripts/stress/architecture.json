@@ -7,85 +7,455 @@
     "protagonist": "hero",
     "narrative_voice": "第三人称限知(以林昭视角为主)",
     "chapter_length_target": 2200,
-    "hard_constraints": ["青霜剑的真相不得早于第60章向读者揭示", "林昭身世不得早于第120章完全揭示"]
+    "hard_constraints": [
+      "青霜剑的真相不得早于第60章向读者揭示",
+      "林昭身世不得早于第120章完全揭示"
+    ]
   },
   "world_facts": [
-    {"fact_key": "sword_origin", "truth": "青霜剑是上古凶兵,剑中封印着前代剑主的怨魂", "secrecy": "secret", "reveal_after": 60, "notes": "中期核心反转"},
-    {"fact_key": "hero_lineage", "truth": "林昭是前代剑主与青云宗叛逃圣女之子", "secrecy": "secret", "reveal_after": 120, "notes": "终局身世反转"},
-    {"fact_key": "sect_motive", "truth": "青云宗收养林昭是为了监视青霜剑的封印变化", "secrecy": "secret", "reveal_after": 90}
+    {
+      "fact_key": "sword_origin",
+      "truth": "青霜剑是上古凶兵,剑中封印着前代剑主的怨魂",
+      "secrecy": "secret",
+      "reveal_after": 60,
+      "notes": "中期核心反转"
+    },
+    {
+      "fact_key": "hero_lineage",
+      "truth": "林昭是前代剑主与青云宗叛逃圣女之子",
+      "secrecy": "secret",
+      "reveal_after": 120,
+      "notes": "终局身世反转"
+    },
+    {
+      "fact_key": "sect_motive",
+      "truth": "青云宗收养林昭是为了监视青霜剑的封印变化",
+      "secrecy": "secret",
+      "reveal_after": 90
+    }
   ],
   "entities": [
-    {"entity_key": "hero", "entity_type": "Character", "name": "林昭", "chapter": 1, "description": "外门弟子,背负不明来历的青霜剑"},
-    {"entity_key": "master", "entity_type": "Character", "name": "沈孤鸿", "chapter": 1, "description": "林昭的授业长老,青云宗剑堂首座"},
-    {"entity_key": "villain", "entity_type": "Character", "name": "墨离", "chapter": 1, "description": "神秘灰袍人,天工阁供奉"},
-    {"entity_key": "rival", "entity_type": "Character", "name": "叶青梧", "chapter": 1, "description": "内门天才,与林昭亦敌亦友"},
-    {"entity_key": "sect", "entity_type": "Faction", "name": "青云宗", "chapter": 1, "description": "北荒第一剑修宗门"},
-    {"entity_key": "guild", "entity_type": "Faction", "name": "天工阁", "chapter": 1, "description": "遍布东洲的器修势力"},
-    {"entity_key": "region", "entity_type": "Location", "name": "北荒", "chapter": 1},
-    {"entity_key": "continent", "entity_type": "Location", "name": "东洲", "chapter": 1},
-    {"entity_key": "sword", "entity_type": "Artifact", "name": "青霜剑", "chapter": 1, "description": "林昭随身古剑,寒气森然"},
-    {"entity_key": "manual", "entity_type": "Item", "name": "残页剑诀", "chapter": 1, "description": "师父所授的不完整剑诀"}
+    {
+      "entity_key": "hero",
+      "entity_type": "Character",
+      "name": "林昭",
+      "chapter": 1,
+      "description": "外门弟子,背负不明来历的青霜剑"
+    },
+    {
+      "entity_key": "master",
+      "entity_type": "Character",
+      "name": "沈孤鸿",
+      "chapter": 1,
+      "description": "林昭的授业长老,青云宗剑堂首座"
+    },
+    {
+      "entity_key": "villain",
+      "entity_type": "Character",
+      "name": "墨离",
+      "chapter": 1,
+      "description": "神秘灰袍人,天工阁供奉"
+    },
+    {
+      "entity_key": "rival",
+      "entity_type": "Character",
+      "name": "叶青梧",
+      "chapter": 1,
+      "description": "内门天才,与林昭亦敌亦友"
+    },
+    {
+      "entity_key": "sect",
+      "entity_type": "Faction",
+      "name": "青云宗",
+      "chapter": 1,
+      "description": "北荒第一剑修宗门"
+    },
+    {
+      "entity_key": "guild",
+      "entity_type": "Faction",
+      "name": "天工阁",
+      "chapter": 1,
+      "description": "遍布东洲的器修势力"
+    },
+    {
+      "entity_key": "region",
+      "entity_type": "Location",
+      "name": "北荒",
+      "chapter": 1
+    },
+    {
+      "entity_key": "continent",
+      "entity_type": "Location",
+      "name": "东洲",
+      "chapter": 1
+    },
+    {
+      "entity_key": "sword",
+      "entity_type": "Artifact",
+      "name": "青霜剑",
+      "chapter": 1,
+      "description": "林昭随身古剑,寒气森然"
+    },
+    {
+      "entity_key": "manual",
+      "entity_type": "Item",
+      "name": "残页剑诀",
+      "chapter": 1,
+      "description": "师父所授的不完整剑诀"
+    }
   ],
   "identity_profiles": [
-    {"profile_key": "p_hero_disguise", "entity_key": "hero", "kind": "disguise", "value": "墨坊学徒", "secrecy": "secret", "fact_key": "hero_lineage", "start_chapter": 0},
-    {"profile_key": "p_villain_role", "entity_key": "villain", "kind": "role", "value": "天工阁供奉", "scope_key": "guild", "start_chapter": 0},
-    {"profile_key": "p_master_title", "entity_key": "master", "kind": "title", "value": "剑堂首座", "scope_key": "sect", "start_chapter": 0}
+    {
+      "profile_key": "p_hero_disguise",
+      "entity_key": "hero",
+      "kind": "disguise",
+      "value": "墨坊学徒",
+      "secrecy": "secret",
+      "fact_key": "hero_lineage",
+      "start_chapter": 0
+    },
+    {
+      "profile_key": "p_villain_role",
+      "entity_key": "villain",
+      "kind": "role",
+      "value": "天工阁供奉",
+      "scope_key": "guild",
+      "start_chapter": 0
+    },
+    {
+      "profile_key": "p_master_title",
+      "entity_key": "master",
+      "kind": "title",
+      "value": "剑堂首座",
+      "scope_key": "sect",
+      "start_chapter": 0
+    }
   ],
   "entity_attributes": [
-    {"entity_key": "hero", "attr_key": "realm", "value": "炼气三层", "chapter": 0},
-    {"entity_key": "villain", "attr_key": "realm", "value": "金丹后期", "chapter": 0},
-    {"entity_key": "master", "attr_key": "realm", "value": "元婴初期", "chapter": 0},
-    {"entity_key": "rival", "attr_key": "realm", "value": "炼气九层", "chapter": 0},
-    {"entity_key": "sword", "attr_key": "grade", "value": "封印中·不可测", "chapter": 0}
+    {
+      "entity_key": "hero",
+      "attr_key": "realm",
+      "value": "炼气三层",
+      "chapter": 0
+    },
+    {
+      "entity_key": "villain",
+      "attr_key": "realm",
+      "value": "金丹后期",
+      "chapter": 0
+    },
+    {
+      "entity_key": "master",
+      "attr_key": "realm",
+      "value": "元婴初期",
+      "chapter": 0
+    },
+    {
+      "entity_key": "rival",
+      "attr_key": "realm",
+      "value": "炼气九层",
+      "chapter": 0
+    },
+    {
+      "entity_key": "sword",
+      "attr_key": "grade",
+      "value": "封印中·不可测",
+      "chapter": 0
+    }
   ],
   "entity_relations": [
-    {"source_entity_key": "hero", "relation_type": "MEMBER_OF", "target_entity_key": "sect", "start_chapter": 0},
-    {"source_entity_key": "rival", "relation_type": "MEMBER_OF", "target_entity_key": "sect", "start_chapter": 0},
-    {"source_entity_key": "master", "relation_type": "MASTER_OF", "target_entity_key": "hero", "start_chapter": 0},
-    {"source_entity_key": "villain", "relation_type": "MEMBER_OF", "target_entity_key": "guild", "start_chapter": 0},
-    {"source_entity_key": "sect", "relation_type": "LOCATED_IN", "target_entity_key": "region", "start_chapter": 0},
-    {"source_entity_key": "region", "relation_type": "LOCATED_IN", "target_entity_key": "continent", "start_chapter": 0},
-    {"source_entity_key": "hero", "relation_type": "OWNS", "target_entity_key": "sword", "start_chapter": 0},
-    {"source_entity_key": "hero", "relation_type": "OWNS", "target_entity_key": "manual", "start_chapter": 0}
+    {
+      "source_entity_key": "hero",
+      "relation_type": "MEMBER_OF",
+      "target_entity_key": "sect",
+      "start_chapter": 0
+    },
+    {
+      "source_entity_key": "rival",
+      "relation_type": "MEMBER_OF",
+      "target_entity_key": "sect",
+      "start_chapter": 0
+    },
+    {
+      "source_entity_key": "master",
+      "relation_type": "MASTER_OF",
+      "target_entity_key": "hero",
+      "start_chapter": 0
+    },
+    {
+      "source_entity_key": "villain",
+      "relation_type": "MEMBER_OF",
+      "target_entity_key": "guild",
+      "start_chapter": 0
+    },
+    {
+      "source_entity_key": "sect",
+      "relation_type": "LOCATED_IN",
+      "target_entity_key": "region",
+      "start_chapter": 0
+    },
+    {
+      "source_entity_key": "region",
+      "relation_type": "LOCATED_IN",
+      "target_entity_key": "continent",
+      "start_chapter": 0
+    },
+    {
+      "source_entity_key": "hero",
+      "relation_type": "OWNS",
+      "target_entity_key": "sword",
+      "start_chapter": 0
+    },
+    {
+      "source_entity_key": "hero",
+      "relation_type": "OWNS",
+      "target_entity_key": "manual",
+      "start_chapter": 0
+    }
   ],
   "narrative_entity_links": [
-    {"narrative_type": "thread", "narrative_key": "t_lineage", "entity_key": "hero", "role": "subject", "chapter": 0},
-    {"narrative_type": "thread", "narrative_key": "t_lineage", "entity_key": "sect", "role": "involves", "chapter": 0},
-    {"narrative_type": "thread", "narrative_key": "t_sword", "entity_key": "sword", "role": "subject", "chapter": 0},
-    {"narrative_type": "thread", "narrative_key": "t_sword", "entity_key": "villain", "role": "antagonist", "chapter": 0},
-    {"narrative_type": "thread", "narrative_key": "t_sect_plot", "entity_key": "sect", "role": "subject", "chapter": 0},
-    {"narrative_type": "thread", "narrative_key": "t_rivalry", "entity_key": "rival", "role": "subject", "chapter": 0},
-    {"narrative_type": "thread", "narrative_key": "t_master_promise", "entity_key": "master", "role": "subject", "chapter": 0}
+    {
+      "narrative_type": "thread",
+      "narrative_key": "t_lineage",
+      "entity_key": "hero",
+      "role": "subject",
+      "chapter": 0
+    },
+    {
+      "narrative_type": "thread",
+      "narrative_key": "t_lineage",
+      "entity_key": "sect",
+      "role": "involves",
+      "chapter": 0
+    },
+    {
+      "narrative_type": "thread",
+      "narrative_key": "t_sword",
+      "entity_key": "sword",
+      "role": "subject",
+      "chapter": 0
+    },
+    {
+      "narrative_type": "thread",
+      "narrative_key": "t_sword",
+      "entity_key": "villain",
+      "role": "antagonist",
+      "chapter": 0
+    },
+    {
+      "narrative_type": "thread",
+      "narrative_key": "t_sect_plot",
+      "entity_key": "sect",
+      "role": "subject",
+      "chapter": 0
+    },
+    {
+      "narrative_type": "thread",
+      "narrative_key": "t_rivalry",
+      "entity_key": "rival",
+      "role": "subject",
+      "chapter": 0
+    },
+    {
+      "narrative_type": "thread",
+      "narrative_key": "t_master_promise",
+      "entity_key": "master",
+      "role": "subject",
+      "chapter": 0
+    }
   ],
   "threads": [
-    {"thread_key": "t_lineage", "name": "林昭身世之谜", "thread_type": "mystery", "introduced_chapter": 1, "target_min_chapter": 100, "target_max_chapter": 140, "main_goal": "层层揭开林昭的血统真相"},
-    {"thread_key": "t_sword", "name": "青霜剑的来历", "thread_type": "mystery", "introduced_chapter": 1, "target_min_chapter": 50, "target_max_chapter": 70, "main_goal": "凶兵封印与历代剑主的秘密"},
-    {"thread_key": "t_sect_plot", "name": "宗门暗流", "thread_type": "conflict", "introduced_chapter": 2, "target_min_chapter": 80, "target_max_chapter": 110, "main_goal": "青云宗收养林昭的真实动机"},
-    {"thread_key": "t_rivalry", "name": "与叶青梧的较量", "thread_type": "relationship", "introduced_chapter": 3, "target_min_chapter": 30, "target_max_chapter": 60},
-    {"thread_key": "t_master_promise", "name": "师徒之诺", "thread_type": "bond", "introduced_chapter": 2, "target_min_chapter": 70, "target_max_chapter": 100}
+    {
+      "thread_key": "t_lineage",
+      "name": "林昭身世之谜",
+      "thread_type": "mystery",
+      "introduced_chapter": 1,
+      "target_min_chapter": 100,
+      "target_max_chapter": 140,
+      "main_goal": "层层揭开林昭的血统真相"
+    },
+    {
+      "thread_key": "t_sword",
+      "name": "青霜剑的来历",
+      "thread_type": "mystery",
+      "introduced_chapter": 1,
+      "target_min_chapter": 50,
+      "target_max_chapter": 70,
+      "main_goal": "凶兵封印与历代剑主的秘密"
+    },
+    {
+      "thread_key": "t_sect_plot",
+      "name": "宗门暗流",
+      "thread_type": "conflict",
+      "introduced_chapter": 2,
+      "target_min_chapter": 80,
+      "target_max_chapter": 110,
+      "main_goal": "青云宗收养林昭的真实动机"
+    },
+    {
+      "thread_key": "t_rivalry",
+      "name": "与叶青梧的较量",
+      "thread_type": "relationship",
+      "introduced_chapter": 3,
+      "target_min_chapter": 30,
+      "target_max_chapter": 60
+    },
+    {
+      "thread_key": "t_master_promise",
+      "name": "师徒之诺",
+      "thread_type": "bond",
+      "introduced_chapter": 2,
+      "target_min_chapter": 70,
+      "target_max_chapter": 100
+    }
   ],
   "mysteries": [
-    {"mystery_key": "m_sword", "name": "青霜剑为何会认林昭为主", "thread_key": "t_sword", "introduced_chapter": 1, "target_min_chapter": 50, "target_max_chapter": 70},
-    {"mystery_key": "m_mother", "name": "林昭生母是谁", "thread_key": "t_lineage", "introduced_chapter": 4, "target_min_chapter": 100, "target_max_chapter": 140},
-    {"mystery_key": "m_elder", "name": "沈孤鸿为何力排众议收林昭为徒", "thread_key": "t_sect_plot", "introduced_chapter": 6, "target_min_chapter": 80, "target_max_chapter": 110}
+    {
+      "mystery_key": "m_sword",
+      "name": "青霜剑为何会认林昭为主",
+      "thread_key": "t_sword",
+      "introduced_chapter": 1,
+      "target_min_chapter": 50,
+      "target_max_chapter": 70
+    },
+    {
+      "mystery_key": "m_mother",
+      "name": "林昭生母是谁",
+      "thread_key": "t_lineage",
+      "introduced_chapter": 4,
+      "target_min_chapter": 100,
+      "target_max_chapter": 140
+    },
+    {
+      "mystery_key": "m_elder",
+      "name": "沈孤鸿为何力排众议收林昭为徒",
+      "thread_key": "t_sect_plot",
+      "introduced_chapter": 6,
+      "target_min_chapter": 80,
+      "target_max_chapter": 110
+    }
   ],
   "emotion_debts": [
-    {"debt_key": "d_humiliation", "thread_key": "t_rivalry", "name": "外门受辱", "emotion_type": "humiliation", "intensity": 0.6, "created_chapter": 3},
-    {"debt_key": "d_rescue", "thread_key": "t_rivalry", "name": "叶青梧暗中相护", "emotion_type": "gratitude", "intensity": 0.5, "created_chapter": 5},
-    {"debt_key": "d_master_sacrifice", "thread_key": "t_master_promise", "name": "师父以身挡劫", "emotion_type": "sacrifice", "intensity": 0.8, "created_chapter": 8}
+    {
+      "debt_key": "d_humiliation",
+      "thread_key": "t_rivalry",
+      "name": "外门受辱",
+      "emotion_type": "humiliation",
+      "intensity": 0.6,
+      "created_chapter": 3
+    },
+    {
+      "debt_key": "d_rescue",
+      "thread_key": "t_rivalry",
+      "name": "叶青梧暗中相护",
+      "emotion_type": "gratitude",
+      "intensity": 0.5,
+      "created_chapter": 5
+    },
+    {
+      "debt_key": "d_master_sacrifice",
+      "thread_key": "t_master_promise",
+      "name": "师父以身挡劫",
+      "emotion_type": "sacrifice",
+      "intensity": 0.8,
+      "created_chapter": 8
+    }
   ],
   "arcs": [
-    {"arc_key": "arc_awaken", "name": "初入宗门", "order_no": 1, "start_chapter": 1, "target_end_chapter": 20, "primary_goal": "林昭站稳脚跟,青霜剑初显异常", "surface_conflict": "外门倾轧与内门选拔", "inherited_thread_keys": ["t_sword", "t_rivalry"], "exit_conditions": ["林昭进入内门", "青霜剑第一次失控"]},
-    {"arc_key": "arc_turmoil", "name": "北荒暗涌", "order_no": 2, "start_chapter": 21, "target_end_chapter": 45, "primary_goal": "剑冢开启,各方势力入场", "surface_conflict": "天工阁渗透与剑冢之争", "forbidden_facts": ["hero_lineage"], "inherited_thread_keys": ["t_sword", "t_sect_plot", "t_master_promise"], "exit_conditions": ["剑冢真相半揭", "沈孤鸿重伤"]}
+    {
+      "arc_key": "arc_awaken",
+      "name": "初入宗门",
+      "order_no": 1,
+      "start_chapter": 1,
+      "target_end_chapter": 20,
+      "primary_goal": "林昭站稳脚跟,青霜剑初显异常",
+      "surface_conflict": "外门倾轧与内门选拔",
+      "inherited_thread_keys": [
+        "t_sword",
+        "t_rivalry"
+      ],
+      "exit_conditions": [
+        "林昭进入内门",
+        "青霜剑第一次失控"
+      ]
+    },
+    {
+      "arc_key": "arc_turmoil",
+      "name": "北荒暗涌",
+      "order_no": 2,
+      "start_chapter": 21,
+      "target_end_chapter": 45,
+      "primary_goal": "剑冢开启,各方势力入场",
+      "surface_conflict": "天工阁渗透与剑冢之争",
+      "forbidden_facts": [
+        "hero_lineage"
+      ],
+      "inherited_thread_keys": [
+        "t_sword",
+        "t_sect_plot",
+        "t_master_promise"
+      ],
+      "exit_conditions": [
+        "剑冢真相半揭",
+        "沈孤鸿重伤"
+      ]
+    }
   ],
   "milestones": [
-    {"milestone_key": "ms_inner_gate", "arc_key": "arc_awaken", "name": "跻身内门", "min_chapter": 12, "max_chapter": 20, "thread_keys": ["t_rivalry"]},
-    {"milestone_key": "ms_sword_rampage", "arc_key": "arc_awaken", "name": "青霜剑首次失控", "min_chapter": 15, "max_chapter": 22, "thread_keys": ["t_sword"]},
-    {"milestone_key": "ms_tomb_open", "arc_key": "arc_turmoil", "name": "剑冢开启", "min_chapter": 28, "max_chapter": 35, "thread_keys": ["t_sword", "t_sect_plot"]}
+    {
+      "milestone_key": "ms_inner_gate",
+      "arc_key": "arc_awaken",
+      "name": "跻身内门",
+      "min_chapter": 12,
+      "max_chapter": 20,
+      "thread_keys": [
+        "t_rivalry"
+      ]
+    },
+    {
+      "milestone_key": "ms_sword_rampage",
+      "arc_key": "arc_awaken",
+      "name": "青霜剑首次失控",
+      "min_chapter": 15,
+      "max_chapter": 20,
+      "thread_keys": [
+        "t_sword"
+      ]
+    },
+    {
+      "milestone_key": "ms_tomb_open",
+      "arc_key": "arc_turmoil",
+      "name": "剑冢开启",
+      "min_chapter": 28,
+      "max_chapter": 35,
+      "thread_keys": [
+        "t_sword",
+        "t_sect_plot"
+      ]
+    }
   ],
   "thread_schedule": [
-    {"schedule_key": "sch_sword_clue1", "thread_key": "t_sword", "stage_type": "Clue", "min_chapter": 4, "max_chapter": 8, "purpose": "剑身寒气异动的首个可观察线索"},
-    {"schedule_key": "sch_rival_clash1", "thread_key": "t_rivalry", "stage_type": "Conflict", "min_chapter": 3, "max_chapter": 7},
-    {"schedule_key": "sch_master_scene1", "thread_key": "t_master_promise", "stage_type": "Deepening", "min_chapter": 6, "max_chapter": 10}
+    {
+      "schedule_key": "sch_sword_clue1",
+      "thread_key": "t_sword",
+      "stage_type": "Clue",
+      "min_chapter": 4,
+      "max_chapter": 8,
+      "purpose": "剑身寒气异动的首个可观察线索"
+    },
+    {
+      "schedule_key": "sch_rival_clash1",
+      "thread_key": "t_rivalry",
+      "stage_type": "Conflict",
+      "min_chapter": 3,
+      "max_chapter": 7
+    },
+    {
+      "schedule_key": "sch_master_scene1",
+      "thread_key": "t_master_promise",
+      "stage_type": "Deepening",
+      "min_chapter": 6,
+      "max_chapter": 10
+    }
   ]
 }

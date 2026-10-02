@@ -19,14 +19,26 @@ def main() -> int:
     args = ap.parse_args()
 
     db = sqlite3.connect(args.db); db.row_factory = sqlite3.Row
-    title_row = db.execute("SELECT value FROM meta WHERE key='blueprint'").fetchone()
-    book_title = '青霜疑锋'
+    # 书名解析链:planning_blueprint.config_json.title → meta.title → meta.blueprint.title → '未命名小说'
+    # (此前写死兜底'青霜疑锋'导致多本书导出互相覆盖)
+    book_title = ''
     try:
         import json
-        bp = json.loads(title_row['value']) if title_row else {}
-        book_title = bp.get('title') or book_title
+        bp_row = db.execute('SELECT payload_json FROM planning_blueprint LIMIT 1').fetchone()
+        if bp_row and bp_row['payload_json']:
+            book_title = (json.loads(bp_row['payload_json']) or {}).get('title') or ''
+        if not book_title:
+            m = db.execute("SELECT value FROM meta WHERE key='title'").fetchone()
+            if m and m['value']:
+                v = m['value']
+                try:
+                    v = json.loads(v)
+                except Exception:
+                    pass
+                book_title = v if isinstance(v, str) else ''
     except Exception:
         pass
+    book_title = book_title or '未命名小说'
     rows = db.execute('SELECT chapter,title,arc,pov,summary,body,committed_at FROM chapters ORDER BY chapter').fetchall()
     if not rows:
         print('还没有已提交章节'); return 1

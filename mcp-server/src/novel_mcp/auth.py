@@ -56,6 +56,7 @@ REVIEWER_TOOLS = WRITER_TOOLS | READS_AUTHOR_LAYER | {
 PLANNER_TOOLS = REVIEWER_TOOLS | {
     'planner_context_get', 'chapter_plan_generate', 'chapter_plan_save', 'chapter_plan_check',
     'blueprint_get', 'blueprint_update', 'story_architect_get', 'story_architect_apply',
+    'novel_architecture_generate',
     'arc_plan_create', 'arc_plan_get', 'arc_progress_get', 'milestone_create', 'milestone_list',
     'thread_schedule_update', 'thread_schedule_get', 'planning_rebuild_window', 'planning_get_window',
     'narrative_pattern_search',
