@@ -14,7 +14,7 @@
   MCP 传输(server.py / stdio_compat / http_compat)   NovelService 方法直调
         └──────────────────┬────────────────────────────┘
                            ▼
-                     NovelService(92 个工具的实现本体)
+                     NovelService(94 个工具的实现本体)
                            │
                            ├─ Context Compiler 编译角色上下文
                            │    ├─ planner 上下文(作者层,含 World Truth)
@@ -32,7 +32,7 @@
 
 ## 2. 工具的暴露方式(路径一专用)
 
-工具的单一事实源是 `mcp-server/src/novel_mcp/tooldefs.py`(92 个工具的名称 + JSON Schema);`runtime.call_tool(name, args)` 反射到 `NovelService` 同名方法——工具本质是 service 方法的 RPC 皮。三条传输:
+工具的单一事实源是 `mcp-server/src/novel_mcp/tooldefs.py`(94 个工具的名称 + JSON Schema);`runtime.call_tool(name, args)` 反射到 `NovelService` 同名方法——工具本质是 service 方法的 RPC 皮。三条传输:
 
 | 传输 | 入口 | 适用 |
 |---|---|---|

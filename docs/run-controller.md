@@ -53,6 +53,20 @@ running
 
 `novel_run_continue` 每次调用最多以 50 个章节步为上限;正常交互操作中请使用小得多的数值。
 
+## 导演位(V0.11,章节前人工引导)
+
+运行配置新增两个开关(均为 SAFE_CONFIG_KEYS,可经决策的 `config_patch` 热切换):
+
+- **`steering_mode`** — 每章规划前暂停,打开 `steering_point` 决策。作者可以:
+  - 直接输入本章引导指令(自由文本):经 `chapter_directive_set` 落库 `chapter_directives` 表,注入规划器上下文的 `author_directive` 字段,并作为提示词规则 12 的强制意志(primary_goal 与情节安排必须落实;与硬约束冲突时经 `author_questions` 请作者裁决);
+  - 或先调 `chapter_direction_propose`(第 94 个工具,走 NOVEL_DIRECTOR→ARCHITECT→PLANNER 模型回退链)让模型基于当前故事状态(到期伏笔/休眠线程/陈年债)提出 N 个走向候选,选定/改写后作为指令提交;
+  - 或留空跳过(全自动规划)。
+- **`plan_review`** — 计划生成并过校验后暂停,打开 `plan_approval` 决策(上下文携带完整计划)。作者可直接批准,或先经 `chapter_plan_save` 修改计划(保存即重新校验,blocked 会被拒绝)再批准。
+
+指令的生命周期严格限定在单章:计划生成后即自动销账(`consumed`),不会泄漏到后续章节。两类决策位每章只开一次(按 run+chapter+decision_type 去重),重试不会重复打扰。
+
+真模型实证见《缺页之海》第 1 章:指令(盘点遇缺页走向)+ 作者两处裁决(航程 137 年、全程独处)全部落进成章《整齐的伤口》。
+
 ## 人工决策
 
 需要作者裁决的控制器故障会存储在 `novel_run_decisions` 中,并把运行状态改为 `needs_author_decision`。

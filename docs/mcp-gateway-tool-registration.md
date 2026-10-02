@@ -1,5 +1,8 @@
 # Novel Agent V0.7 接入 lsl1016/mcp-server 工具注册指南
 
+> **状态(2026-10-02,V0.11)**:本文流程有效;工具数已演进至 94(v0.11),重新导出 tool_schemas.json 后按本文注册即可。
+
+
 > 目标：不再把 Novel Agent 自己作为一个独立 MCP Server 直接接客户端，而是把 Novel Agent 的 79 个能力作为普通 HTTP JSON 工具注册到 `lsl1016/mcp-server`，统一获得应用授权、工具上下线、审计、限流和 MCP 对外暴露能力。
 
 ## 0. 本文基于的 mcp-server 版本

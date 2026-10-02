@@ -8,7 +8,7 @@
 
 ![Python](https://img.shields.io/badge/python-3.10%2B-3776AB?logo=python&logoColor=white)
 ![Backend Deps](https://img.shields.io/badge/backend%20deps-0-green)
-![MCP Tools](https://img.shields.io/badge/MCP%20tools-91-blue)
+![MCP Tools](https://img.shields.io/badge/MCP%20tools-94-blue)
 ![LLM Protocol](https://img.shields.io/badge/LLM-OpenAI%20%7C%20Anthropic-8A2BE2)
 ![Frontend](https://img.shields.io/badge/frontend-React%2018-61DAFB)
 
@@ -20,7 +20,7 @@
 
 Novel Agent 是一个面向长篇小说的 AI 创作运行时:以**世界模型 + 叙事模型**双知识图谱承载设定与剧情,由**检索与上下文编译器**为规划者 / 写作者 / 审校者供给恰好够用、权限安全的信息,用**八重审校闸门**守护正典唯一真相,再以**有界自动推进**状态机实现约 8–9 分钟一章的无人值守长跑。
 
-后端零第三方依赖(纯 Python stdlib),91 个 MCP 工具可接入 Claude / Codex / ChatGPT / 自研 Agent。
+后端零第三方依赖(纯 Python stdlib),94 个 MCP 工具可接入 Claude / Codex / ChatGPT / 自研 Agent;V0.11 新增**导演位**——每章边界可输入人工引导指令、或让模型提案走向候选并审核修改计划后再开写。
 
 ## 🏗️ 架构总览
 
@@ -28,7 +28,7 @@ Novel Agent 是一个面向长篇小说的 AI 创作运行时:以**世界模型 
   <img src="docs/images/architecture-overview.png" alt="Novel Agent 架构总览" width="860">
 </div>
 
-六层架构:产品与接入层(创作工作台 / 各类 Agent / MCP Client)→ 控制与工具层(创作纪律 Skill + 91 个 MCP 工具 + HTTP 门面)→ 运行时层(规划 / 写作 / 审校 / 运行控制 / 上下文编译)→ 知识层(实体图 + 叙事图双模型)→ 模型层(OpenAI / Anthropic 双协议)→ 存储层(SQLite 正典库)。
+六层架构:产品与接入层(创作工作台 / 各类 Agent / MCP Client)→ 控制与工具层(创作纪律 Skill + 94 个 MCP 工具 + HTTP 门面)→ 运行时层(规划 / 写作 / 审校 / 运行控制 / 上下文编译)→ 知识层(实体图 + 叙事图双模型)→ 模型层(OpenAI / Anthropic 双协议)→ 存储层(SQLite 正典库)。
 
 ## 🧠 故事知识:世界模型 + 叙事模型
 
@@ -65,12 +65,14 @@ Novel Agent 是一个面向长篇小说的 AI 创作运行时:以**世界模型 
 ## ✨ 特性
 
 - **🧩 双模型故事知识** — 实体图(角色 / 阵营 / 地点 / 物品 / 时序属性与关系)+ 叙事图(叙事线 / 谜团 / 伏笔 / 情感债 / 信念状态),支持身份档案、一等事件、断言与双时序披露。
-- **🔍 检索与上下文编译器** — 按角色可见性隔离,确定性相关性排序 + token 预算打包;写作者拿到的是 12k 预算的安全上下文,审校者另有可感知作者真相的独立快照。
+- **🔍 检索与上下文编译器** — 按角色可见性隔离,确定性相关性排序 + token 预算打包(写作者默认 56k / 规划者 120k / 审校者 104k,可配);写作者拿到的安全上下文不含任何隐藏真相值,审校者另有可感知作者真相的独立快照。
 - **🛡️ 八重审校闸门** — 4 个确定性审校者 + 4 个语义审校者,BLOCK 触发有界修订循环,知识泄漏零容忍。
+- **🎬 导演位(人工引导)** — `steering_mode` 让每章规划前暂停:输入本章引导指令,或让模型基于当前故事状态提案 3 个走向候选(带触达线程与风险),选定/改写后生效;`plan_review` 让计划生成后可查看/修改(JSON 编辑+重新校验)再批准开写。指令在计划生成后自动销账,不污染后续章节。
 - **🔁 有界自动推进** — 持久化运行状态机:断点续跑、自动重试、作者决策(HITL)与重新规划。
-- **🔐 权限隔离** — viewer / writer / reviewer / planner / controller 五种角色;写作者永远看不到作者层真相。
-- **🧰 91 个 MCP 工具 + HTTP 门面** — 兼容 OpenAI / Anthropic 双协议的任意端点,同一套配置无缝切换;后端零第三方依赖。
-- **🖥️ Web 工作台** — 实时流水线监视(SSE)、章节纸页阅读、实体图谱、叙事看板与时间线;静态 SPA 与 API 同进程提供,运行侧零 Node 依赖。
+- **🔐 权限隔离** — viewer(读者)/ writer / reviewer / planner / controller 五类应用角色 + admin;写作者与读者永远看不到作者层真相(服务端裁剪,非前端隐藏)。
+- **🧰 94 个 MCP 工具 + HTTP 门面** — 兼容 OpenAI / Anthropic 双协议的任意端点,同一套配置无缝切换;后端零第三方依赖。
+- **✦ 一句话开书** — `./novel.sh new "创意" 300 3` 或 Web 开书向导:四段式生成完整架构(蓝图/真相/实体/叙事/篇章)→ 跨引用确定性校验 → 有界修复回路 → 显式应用 → 自动开跑。
+- **🖥️ Web 工作台(九工作区)** — 项目主页/运行中心(实时流水线+导演台+HITL)/写作工作室(纸页+定稿闸门+草稿编辑)/开书向导/世界观设定集(可缩放图谱)/叙事看板(信念矩阵+伏笔台账)/规划器(弧线甘特)/审校中心(章节×审校器矩阵)/时间线;多书管理、慢操作作业执行器,静态 SPA 与 API 同进程,运行侧零 Node 依赖。
 - **📖 正典唯一真相** — 只有定稿闸门放行的章节才进入正典故事图;抽取候选必须携带证据链经 `candidate_promote` 晋升。
 
 ## 🚀 快速开始
@@ -192,6 +194,8 @@ python3 -m novel_mcp.web_api --db story-data/stress.db --static frontend/dist --
 | 语义审校 | `docs/semantic-review-runtime.md` |
 | 上下文编译器 | `docs/context-compiler-runtime.md` |
 | 运行控制器 | `docs/run-controller.md`(持久化有界自动推进状态机) |
+| 工具契约 | `docs/tool-contracts.md`(94 工具分组与正典/机密边界) |
+| 阶段报告 | `docs/phase-b-final-report.md` · `phase-c-report.md` · `a0/phase-a-v2` 实施报告 |
 | Agent 接入 | `docs/agent-paths.md`(双路径架构与外部 Agent 接入) |
 | 客户端与端点配置 | `docs/client-configs.md`(MCP 客户端、模型端点矩阵、角色鉴权) |
 | MCP 网关注册 | `docs/mcp-gateway-tool-registration.md` |
@@ -203,7 +207,7 @@ python3 -m novel_mcp.web_api --db story-data/stress.db --static frontend/dist --
 
 ```text
 novel-agent/
-├── mcp-server/                # Python 包:91 个 MCP 工具 + HTTP 门面 + Web BFF(零第三方依赖)
+├── mcp-server/                # Python 包:94 个 MCP 工具 + HTTP 门面 + Web BFF(零第三方依赖)
 ├── frontend/                  # React 18 + TS + Vite 的 Web 工作台(dist 预编译随仓库发布)
 ├── skills/long-novel-writer/  # 创作纪律与工具使用工作流(Skill)
 ├── scripts/stress/            # 长跑驱动、实时观察、单章冒烟、KPI 采集与小说导出

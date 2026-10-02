@@ -1,5 +1,7 @@
 # Phase C 产品方案与形态：一句话开书
 
+> **实现状态(2026-10-02)**:三形态已兑现:Agent 对话(MCP 工具 novel_architecture_generate)、CLI(novel-story create-from-idea / ./novel.sh new)、Web 开书向导(D3,真模型实测 150 秒 0 error)。闪电模式(--apply --run)与双题材验证完成;interview 模式未做(auto 假设记录已生效)。
+
 > 状态：产品方案（2026-10-02），与技术设计稿 `docs/phase-c-design.md` 配套阅读。
 > 本文回答"用户拿到什么、怎么用"；技术稿回答"系统怎么造"。
 

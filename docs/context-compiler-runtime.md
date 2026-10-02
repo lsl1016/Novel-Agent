@@ -1,4 +1,11 @@
-# Novel Agent V0.7 — 检索与上下文编译器运行时
+# Novel Agent V0.7(基础篇) — 检索与上下文编译器运行时
+
+> **状态(2026-10-02,V0.11)**:本文的机制描述(确定性评分/角色隔离/预算打包/裁剪序)仍然准确;
+> 以下数字与能力已演进:默认预算 **writer 56k / planner 120k / reviewer 104k**(编译器硬顶 256k);
+> planner 上下文新增注入 **`author_directive`(导演指令)**、**`due_foreshadowing`(伏笔销账台账,带 callback_key)**、
+> `dormant_threads` / `aging_debts`;v0.10 实体图 V2(身份/事件/断言/双时序)丰富了检索面。
+> 详见 `phase-b-final-report.md` 与 `run-controller.md` 导演位章节。
+
 
 ## 1. 目标
 
@@ -17,7 +24,7 @@ V0.7 解决的问题不是“模型能不能查到图谱”，而是：当小说
 
 ### 2.1 规划器上下文（Planner Context）
 
-默认预算 24k tokens。可以看到：
+默认预算 24k tokens(v0.7 基线;V0.11 起 planner 默认 120k,可配)。可以看到：
 
 - 蓝图（Blueprint）
 - 世界真相（World Truth）
@@ -31,7 +38,7 @@ Planner Context 是作者层，不允许直接用于正文生成。
 
 ### 2.2 写作者上下文（Writer Context）
 
-默认预算 12k tokens。只能看到：
+默认预算 12k tokens(v0.7 基线;V0.11 起 writer 默认 56k,可配)。只能看到：
 
 - 章节计划（ChapterPlan）
 - 读者认知（Reader Knowledge）
@@ -122,9 +129,9 @@ Writer 只得到 Reader/POV 可见 stage；`private_author` stage 只允许 Plan
 
 默认值：
 
-- Writer：12k
+- Writer：12k(v0.7 基线;V0.11 默认 56k)
 - Reviewer：20k
-- Planner：24k
+- Planner：24k(v0.7 基线;V0.11 默认 120k)
 
 Writer 默认软配额：
 

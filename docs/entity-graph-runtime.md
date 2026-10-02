@@ -1,4 +1,11 @@
-# Novel Agent V0.7 — 实体图 / 世界模型运行时
+# Novel Agent V0.7 — 实体图 / 世界模型运行时(基础篇)
+
+> **状态(2026-10-02)**:本文描述的实体图 V1 机制仍然生效。v0.10 起 Phase A 已交付 **实体图 V2**:
+> 身份档案链(identity_profiles)、一等事件与因果链(events/event_participants/cause_event_id)、
+> 断言与证据(fact_assertions)、**双时序披露**(fact_disclosures,按持有者各自的 knowledge_time)、
+> 力量/器物/地理子图视图。schema 已收敛为迁移制(`schema.py` MIGRATIONS,现至 v6)。
+> 详见 `phase-a-v2-report.md` 与 `tool-contracts.md` 的 V2 分组。
+
 
 ## 1. 目标
 

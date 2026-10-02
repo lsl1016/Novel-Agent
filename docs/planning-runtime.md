@@ -1,5 +1,8 @@
 # Novel Agent V0.2 — 规划运行时
 
+> **状态(2026-10-02,V0.11)**:规划运行时仍如本文所述;v0.10 新增一句话开书(novel_architecture_generate 四段生成 + architecture_check 跨引用校验,接在 story_architect_apply 前);v0.11 新增导演位(steering_mode/plan_review,见 run-controller.md)。
+
+
 规划运行时（Planning Runtime）位于作者意图与章节正文起草之间。它不生成正文，而是存储并校验：一章为何存在、它允许揭示什么，以及它推进了哪些长期剧情义务。
 
 ## 规划层级

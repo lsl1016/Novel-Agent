@@ -2,6 +2,8 @@
 
 日常用到的命令按使用频率排:**导出小说 → 发起/续跑长跑 → 看指标 → 单章冒烟**。所有脚本都从仓库根目录运行。
 
+**导演模式(人工引导长跑)**:drive.py 面向无人值守;若要每章边界人工介入(输入指令/让模型提案走向/审核修改计划),经 Web 工作台运行中心以 `steering_mode`/`plan_review` 启动(见 `docs/run-controller.md` 导演位章节),或 MCP `novel_run_start` 携带同名参数后逐章 `novel_run_step` + 决策。
+
 **一键入口**:仓库根目录的 `./novel.sh` 把下列常用操作收编为子命令(`start`/`stop`/`status`/`watch`/`log`/`export`/`book`/`metrics`/`smoke`,库不存在时自动 `--seed`,启动自动带思考捕获),详见根 `README.md`。本文件保留各脚本的完整参数说明。
 
 ## 快速开始(三条命令)
