@@ -119,10 +119,22 @@ novel-story apply-architecture \
 
 ## 长跑写作与导出(推荐入口)
 
-配置好模型端点(`env/llm.env`,见 `scripts/stress/README.md`)后,三条命令完成"写一本书 → 读正文 → 看指标":
+配置好模型端点(`env/llm.env`,见 `scripts/stress/README.md`)后,**`./novel.sh` 一个入口搞定**(start 自动断点续跑并开启思考捕获,stop 无损停止):
 
 ```bash
-# 发起/续跑长跑写作(首次带 --seed 载入种子架构;无人值守建议 --auto-answer):
+./novel.sh start        # 发起/续跑长跑(写到第 40 章;./novel.sh start 60 可指定)
+./novel.sh watch        # 实时观察创作:阶段事件流 + 模型思考流
+./novel.sh status       # 看进度:进程/章节/字数/最近章节
+./novel.sh book         # 导出小说并用编辑器打开(story-data/novel/<书名>.md)
+./novel.sh stop         # 无损停止(已提交章节不丢,再 start 即续跑)
+./novel.sh metrics      # KPI 指标(token 增长/BLOCK 率/线程沉睡等)
+./novel.sh log          # 跟随驱动日志;./novel.sh smoke 单章冒烟
+```
+
+等价的底层命令(`novel.sh start` 在库文件不存在时会自动补 `--seed` 载入种子架构;已有库直接续跑,不会重写任何已提交章节):
+
+```bash
+# 首次:载入种子架构并开跑(之后直接 ./novel.sh start 即可续跑)
 python3 scripts/stress/drive.py --db story-data/stress.db --seed --auto-answer --target-chapter 40
 
 # 随时把已提交章节导出为可读 Markdown(story-data/novel/<书名>.md):
@@ -133,6 +145,25 @@ python3 scripts/stress/metrics.py --db story-data/stress.db
 ```
 
 完整参数表、断点续跑、单章冒烟、审校意见回放等见 **`scripts/stress/README.md`**。实测约 8-9 分钟/章。
+
+## Web 工作台(Phase D1)
+
+浏览器可视化长跑:实时流水线监视(SSE)、章节纸页阅读、定稿检查单、审校结论。同一进程提供静态 SPA + `/api/v1` 聚合读 + 动作透传(与外部 Agent 走同一闸门),后端零新增依赖:
+
+```bash
+# 1) 构建前端产物(一次性;运行不需要 Node)
+cd frontend && npm install && npm run build && cd ..
+
+# 2) 起工作台(指向任意故事库;建议对长跑库用备份副本)
+python3 -m novel_mcp.web_api --db story-data/stress.db --static frontend/dist --port 8080
+#    或等价: novel-story web --db ... --static ... --port 8080  (PYTHONPATH=mcp-server/src)
+
+# 3) 打开 http://127.0.0.1:8080
+```
+
+开发模式:`cd frontend && npm run dev`(`:5173`,`/api` 自动代理到 `:8080`)。
+鉴权:配置 `NOVEL_FACADE_TOKENS` 后登录页输入令牌;`viewer` 角色即读者模式(只见正典与运行状态,草稿/规划在服务端裁剪)。未配置令牌时为本地开放模式(admin)。
+设计与实现:`docs/phase-d-web-design.md` / `docs/phase-d-web-tech.md`。
 
 ## 实体图检索
 
