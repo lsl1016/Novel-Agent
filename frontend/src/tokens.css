@@ -1,0 +1,68 @@
+/* 语义色单一来源(docs/phase-d-web-design.md §3.2)。
+   亮色工房为默认底材;颜色只表达状态与归属,绝不做装饰。
+   语义色按白底对比度校准(≥AA 文本对比)。 */
+:root {
+  /* 底材:亮色工房 */
+  --bg: #f5f6f8;
+  --panel: #ffffff;
+  --panel-2: #eef0f4;
+  --line: #e3e6ec;
+  --line-strong: #cdd2db;
+  --text: #1f2430;
+  --muted: #69707d;
+  --shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 4px 16px rgba(16, 24, 40, .06);
+  --shadow-lg: 0 12px 40px rgba(16, 24, 40, .14);
+
+  /* 状态语义(亮底校准) */
+  --sem-canon: #a86e10;       /* 正典·定论 · 金 */
+  --sem-canon-bg: #fdf3e0;
+  --sem-draft: #3f74ad;       /* 草稿·暂定 · 蓝 */
+  --sem-draft-bg: #e8f1fa;
+  --sem-secret: #92519e;      /* 秘密·作者私有 · 紫 */
+  --sem-secret-bg: #f6edf9;
+  --sem-block: #cf3c35;       /* 审校 BLOCK */
+  --sem-block-bg: #fdecea;
+  --sem-warn: #b26a05;        /* 审校 WARN · 琥珀 */
+  --sem-warn-bg: #fdf3e2;
+  --sem-pass: #238551;        /* 审校 PASS · 绿 */
+  --sem-pass-bg: #e6f5ec;
+  --sem-truth: #7c4dbd;       /* 三方认知:世界真相 */
+  --sem-truth-bg: #f0e9fa;
+  --sem-reader: #3b7fc4;      /* 三方认知:读者 */
+  --sem-reader-bg: #e8f1fa;
+  --sem-character: #1e8f84;   /* 三方认知:角色 */
+  --sem-character-bg: #e3f3f1;
+  --sem-active: #238551;      /* 线程活跃 */
+  --sem-dormant: #8a91a0;     /* 线程休眠 */
+  --sem-resolved: #a86e10;    /* 已兑付 */
+
+  --accent: #3b7fc4;
+  --accent-bg: #e8f1fa;
+  --radius: 8px;
+  --font-ui: -apple-system, 'PingFang SC', 'HarmonyOS Sans SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
+  --font-prose: 'Noto Serif SC', 'Songti SC', 'SimSun', serif;
+  --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
+}
+
+/* 底材:纸页书房(正文阅读/写作)——暖米色与衬线区隔于工房 */
+[data-surface='paper'] {
+  --bg: #f8f4ea;
+  --panel: #fffdf6;
+  --panel-2: #f2ecdc;
+  --line: #e4dbc4;
+  --line-strong: #d3c6a6;
+  --text: #33302a;
+  --muted: #8d8471;
+  --shadow: 0 2px 14px rgba(120, 100, 60, .08);
+}
+
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; margin: 0; }
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+a { color: inherit; text-decoration: none; }

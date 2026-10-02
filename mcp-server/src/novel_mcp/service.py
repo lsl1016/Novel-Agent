@@ -1082,3 +1082,281 @@ class NovelService:
         extract=self._auto_extract(chapter,title,body,arc) if auto_extract else {'status':'skipped','candidate_count':0}
         cont=self.continuity_check(chapter,declared_updates.get('world_facts',[]),declared_updates.get('character_states',[]),declared_updates.get('entities',[]),declared_updates.get('entity_attributes',[]),declared_updates.get('entity_relations',[]))
         return {'ok':cont['ok'],'committed':True,'chapter':chapter,'declared_updates_applied':applied,'auto_extraction':extract,'continuity':cont,'next_state_summary':self.story_pressure_check(chapter)}
+
+    # ---- Web BFF 聚合读(Phase D1):只读,进程内直调,不经工具面 ----
+    # 约定:这些方法只 SELECT + 复用既有只读方法,永不写库;"UI 永不绕闸门"
+    # 的另一半在 web_api.py —— 写动作一律透传 facade_call。
+
+    def _web_run_public(self, row) -> dict:
+        r = dict(row)
+        for src, dst in (('config_json', 'config'), ('stop_reason_json', 'stop_reason')):
+            raw = r.pop(src, None)
+            if raw:
+                try: r[dst] = json.loads(raw)
+                except Exception: r[dst] = raw
+            else:
+                r[dst] = None
+        return r
+
+    def web_home(self, chapter: int | None = None):
+        last = self.canon.max_committed_chapter() or 0
+        at = int(chapter or last)
+        bp = self.planning.blueprint_get()
+        with self.store.connect() as db:
+            agg = db.execute('SELECT COUNT(*) c, COALESCE(SUM(LENGTH(body)),0) s FROM chapters').fetchone()
+            recent = [dict(r) for r in db.execute(
+                'SELECT chapter,title,arc,pov,LENGTH(body) chars,committed_at FROM chapters ORDER BY chapter DESC LIMIT 7').fetchall()]
+            inbox = {
+                'open_decisions': db.execute("SELECT COUNT(*) c FROM novel_run_decisions WHERE status='open'").fetchone()['c'],
+                'pending_candidates': db.execute("SELECT COUNT(*) c FROM extraction_candidates WHERE status='candidate'").fetchone()['c'],
+                'active_draft_chapters': db.execute(
+                    "SELECT COUNT(DISTINCT chapter) c FROM chapter_drafts WHERE status NOT IN ('committed','rejected')").fetchone()['c'],
+            }
+            arcs = [dict(r) for r in db.execute(
+                'SELECT arc_key,name,order_no,start_chapter,target_end_chapter,status FROM arc_plans ORDER BY order_no').fetchall()]
+            run_row = db.execute('SELECT * FROM novel_runs ORDER BY created_at DESC LIMIT 1').fetchone()
+        current_arc = next((a for a in arcs if a['start_chapter'] <= at and at <= (a['target_end_chapter'] or 10**9)), None)
+        return {
+            'book': {'title': (bp.get('blueprint') or {}).get('title') if isinstance(bp, dict) else None,
+                     'genre': (bp.get('blueprint') or {}).get('genre') if isinstance(bp, dict) else None},
+            'cursor_chapter': at,
+            'progress': {'committed_chapters': agg['c'], 'total_chars': agg['s'], 'latest_chapter': last},
+            'arcs': arcs, 'current_arc': current_arc,
+            'pressure': self.story_pressure_check(at),
+            'inbox': inbox,
+            'recent_chapters': list(reversed(recent)),
+            'run': self._web_run_public(run_row) if run_row else None,
+        }
+
+    def web_runs(self) -> list:
+        with self.store.connect() as db:
+            rows = db.execute('SELECT * FROM novel_runs ORDER BY created_at DESC LIMIT 50').fetchall()
+        return [self._web_run_public(r) for r in rows]
+
+    def web_run(self, run_id: str) -> dict:
+        with self.store.connect() as db:
+            row = db.execute('SELECT * FROM novel_runs WHERE run_id=?', (run_id,)).fetchone()
+            if not row: raise KeyError(f'no such run: {run_id}')
+            run = self._web_run_public(row)
+            events = [dict(r) for r in db.execute(
+                'SELECT * FROM novel_run_events WHERE run_id=? ORDER BY id DESC LIMIT 200', (run_id,)).fetchall()]
+            for e in events:
+                try: e['detail'] = json.loads(e.pop('detail_json') or 'null')
+                except Exception: e['detail'] = None
+            chapters = [dict(r) for r in db.execute(
+                'SELECT chapter,title,LENGTH(body) chars,committed_at FROM chapters WHERE chapter>=? ORDER BY chapter',
+                (run.get('start_chapter') or 1,)).fetchall()]
+            decisions = [dict(r) for r in db.execute(
+                "SELECT decision_id,chapter,decision_type,status,prompt,context_json,created_at FROM novel_run_decisions "
+                "WHERE run_id=? ORDER BY created_at DESC LIMIT 50", (run_id,)).fetchall()]
+        for d in decisions:
+            try:
+                ctx = json.loads(d.pop('context_json') or 'null') or {}
+            except Exception:
+                ctx = {}
+            d['context'] = {k: ctx.get(k) for k in ('reason', 'decision_type', 'traceback') if ctx.get(k) is not None}
+            qs = ((ctx.get('plan_result') or {}).get('author_questions')) or []
+            if isinstance(qs, list) and qs:
+                d['author_questions'] = [q if isinstance(q, str) else (q.get('question') or q.get('q') or '')
+                                         for q in qs if isinstance(q, (str, dict)) and (q if isinstance(q, str) else (q.get('question') or q.get('q')))]
+            else:
+                d['author_questions'] = []
+        return {'run': run, 'events': list(reversed(events)), 'chapters': chapters, 'open_decisions': decisions}
+
+    def web_chapter(self, chapter: int) -> dict:
+        with self.store.connect() as db:
+            row = db.execute('SELECT chapter,title,arc,pov,summary,body,committed_at FROM chapters WHERE chapter=?', (int(chapter),)).fetchone()
+        canon = dict(row) if row else None
+        plan = self.planning.chapter_plan_get(int(chapter))
+        drafts = [{'version': d['version'], 'status': d['status'], 'source': d['source'], 'model': d['model'],
+                   'parent_version': d['parent_version'], 'created_at': d['created_at']}
+                  for d in self.writing.list_drafts(int(chapter))]
+        latest = self.writing.get_draft(int(chapter))
+        reviews = self.writing.get_reviews(int(chapter), latest['version']) if latest else []
+        review_summary = [{'reviewer_type': r['reviewer_type'], 'verdict': r.get('verdict'), 'score': r.get('score'),
+                           'findings': len(r.get('findings') or [])} for r in reviews]
+        return {'chapter': int(chapter), 'canon': canon, 'chapter_plan': plan, 'drafts': drafts,
+                'latest_draft_version': latest['version'] if latest else None,
+                'reviews': review_summary, 'gate': self._web_finalize_gate(int(chapter))}
+
+    def _web_finalize_gate(self, chapter: int) -> dict:
+        d = self.writing.get_draft(int(chapter))
+        if not d:
+            return {'ready': False, 'draft_version': None, 'checks': [{'key': 'draft_exists', 'ok': False}]}
+        checks = [{'key': 'draft_exists', 'ok': True, 'draft_version': d['version']}]
+        cp = self.planning.chapter_plan_get(int(chapter))
+        checks.append({'key': 'plan_valid', 'ok': bool(cp) and cp.get('validation_status') != 'blocked'})
+        reviews = self.writing.get_reviews(int(chapter), d['version'])
+        required = {'knowledge_leak', 'continuity', 'narrative', 'character'}
+        have = {r['reviewer_type'] for r in reviews}
+        checks.append({'key': 'reviews_complete', 'ok': required.issubset(have), 'missing': sorted(required - have)})
+        ov = overall_verdict(reviews) if reviews else 'NOT_REVIEWED'
+        checks.append({'key': 'review_verdict_ok', 'ok': ov in ('PASS', 'WARN'), 'verdict': ov})
+        return {'ready': all(c['ok'] for c in checks), 'draft_version': d['version'], 'checks': checks}
+
+    def web_draft(self, chapter: int, version: int | None = None) -> dict:
+        d = self.writing.get_draft(int(chapter), version)
+        if not d: raise KeyError(f'no draft for chapter {chapter} version {version or "latest"}')
+        return d
+
+    # ---- Web BFF 聚合读(Phase D2):设定集/图谱/看板/时间线(作者层) ----
+
+    def _web_at(self, chapter) -> int:
+        return int(chapter or self.canon.max_committed_chapter() or 0)
+
+    def web_entities(self, chapter=None, q='', entity_type=None, limit=200):
+        at = self._web_at(chapter)
+        rows = self.entity_graph.search(q or '', entity_type, 'active', at, 'reader', False, limit)
+        counts: dict[str, int] = {}
+        for r in rows:
+            counts[r.get('entity_type') or '?'] = counts.get(r.get('entity_type') or '?', 0) + 1
+        return {'chapter': at, 'entities': rows, 'type_counts': counts}
+
+    def web_entity(self, entity_key, chapter=None):
+        at = self._web_at(chapter)
+        with self.store.connect() as db:
+            ent = db.execute('SELECT * FROM entities WHERE entity_key=?', (entity_key,)).fetchone()
+            if not ent: raise KeyError(f'unknown entity: {entity_key}')
+            out = dict(ent)
+            out['properties'] = jl(out.pop('properties_json') or 'null')
+            out['aliases'] = [dict(r) for r in db.execute(
+                'SELECT alias,alias_type,secrecy,reveal_after,fact_key FROM entity_aliases WHERE entity_key=?', (entity_key,))]
+            out['identity_profiles'] = [dict(r) for r in db.execute(
+                'SELECT profile_key,kind,value,scope_key,secrecy,parent_profile_key,start_chapter,end_chapter,notes '
+                'FROM identity_profiles WHERE entity_key=? ORDER BY kind', (entity_key,))]
+            out['attributes'] = [dict(r) for r in db.execute(
+                'SELECT attr_key,value_json,start_chapter,end_chapter,secrecy,fact_key,cause_event_id FROM entity_attributes '
+                'WHERE entity_key=? AND start_chapter<=? ORDER BY attr_key, start_chapter', (entity_key, at))]
+            for a in out['attributes']:
+                a['value'] = jl(a.pop('value_json') or 'null')
+            out['relations'] = [dict(r) for r in db.execute(
+                'SELECT source_entity_key,relation_type,target_entity_key,start_chapter,end_chapter,secrecy,fact_key,cause_event_id '
+                'FROM entity_relations WHERE (source_entity_key=? OR target_entity_key=?) AND start_chapter<=? '
+                'AND (end_chapter IS NULL OR end_chapter>=?)', (entity_key, entity_key, at, at))]
+            out['narrative_links'] = [dict(r) for r in db.execute(
+                'SELECT narrative_type,narrative_key,role,chapter FROM narrative_entity_links WHERE entity_key=? '
+                'ORDER BY chapter', (entity_key,))]
+            out['assertions'] = [dict(r) for r in db.execute(
+                'SELECT assertion_id,predicate,object_value,chapter,source_span,truth_status,confidence FROM fact_assertions '
+                'WHERE subject_type=? AND subject_key=? ORDER BY chapter DESC LIMIT 50', ('entity', entity_key))]
+            for a in out['assertions']:
+                try: a['object_value'] = jl(a['object_value']) if isinstance(a['object_value'], str) else a['object_value']
+                except Exception: pass
+        names = {r['entity_key']: r['name'] for r in self.entity_graph.search('', None, 'active', 10**9, 'reader', False, 500)}
+        for r in out['relations']:
+            r['source_name'] = names.get(r['source_entity_key'])
+            r['target_name'] = names.get(r['target_entity_key'])
+        with self.store.connect() as db:
+            for l in out['narrative_links']:
+                if l['narrative_type'] == 'thread':
+                    t = db.execute('SELECT name FROM threads WHERE thread_key=?', (l['narrative_key'],)).fetchone()
+                    l['narrative_name'] = t['name'] if t else l['narrative_key']
+        out['chapter'] = at
+        return out
+
+    def web_graph(self, chapter=None):
+        at = self._web_at(chapter)
+        with self.store.connect() as db:
+            nodes = [dict(r) for r in db.execute(
+                "SELECT entity_key,name,entity_type,introduced_chapter FROM entities WHERE status='active' AND introduced_chapter<=?", (at,))]
+            edges = [dict(r) for r in db.execute(
+                'SELECT source_entity_key,relation_type,target_entity_key,start_chapter,end_chapter,secrecy,reveal_from '
+                'FROM (SELECT *, reveal_after AS reveal_from FROM entity_relations) '
+                'WHERE start_chapter<=? AND (end_chapter IS NULL OR end_chapter>=?)', (at, at))]
+        def visible(e):
+            if e['secrecy'] == 'public': return True
+            return e['reveal_from'] is not None and at >= e['reveal_from']
+        return {'chapter': at,
+                'nodes': [{'key': n['entity_key'], 'name': n['name'], 'type': n['entity_type']} for n in nodes],
+                'edges': [{'source': e['source_entity_key'], 'type': e['relation_type'], 'target': e['target_entity_key'],
+                           'secret': not visible(e)} for e in edges],
+                'author_view': True}
+
+    def web_board(self, chapter=None):
+        at = self._web_at(chapter)
+        with self.store.connect() as db:
+            threads = [dict(r) for r in db.execute('SELECT * FROM threads ORDER BY introduced_chapter')]
+            stages = [dict(r) for r in db.execute(
+                'SELECT id,thread_key,chapter,stage_type,content,strength,status,callback_key FROM stages WHERE chapter<=? ORDER BY chapter', (at,))]
+            mysteries = [dict(r) for r in db.execute('SELECT * FROM mysteries ORDER BY introduced_chapter')]
+            debts = [dict(r) for r in db.execute(
+                'SELECT debt_key,thread_key,name,emotion_type,intensity,created_chapter,status,resolved_chapter FROM debts WHERE created_chapter<=? '
+                'ORDER BY created_chapter', (at,))]
+            beliefs = [dict(r) for r in db.execute(
+                'SELECT fact_key,holder,chapter,stance,value_json FROM beliefs WHERE chapter<=?', (at,))]
+            facts = [dict(r) for r in db.execute('SELECT fact_key,truth_json,secrecy,reveal_after,notes FROM world_facts')]
+            disclosures = [dict(r) for r in db.execute(
+                'SELECT fact_key,holder,known_from_chapter FROM fact_disclosures WHERE known_from_chapter<=?', (at,))]
+        # 信念矩阵:每个事实 × 持有者在该章的最新认知
+        latest: dict[tuple, dict] = {}
+        for b in beliefs:
+            k = (b['fact_key'], b['holder'])
+            if k not in latest or b['chapter'] >= latest[k]['chapter']:
+                latest[k] = b
+        holder_set = sorted({h for (_, h) in latest} | {'reader'})
+        matrix = []
+        for f in facts:
+            holders = {}
+            for h in holder_set:
+                b = latest.get((f['fact_key'], h))
+                disc = next((d for d in disclosures if d['fact_key'] == f['fact_key'] and d['holder'] == h), None)
+                if b or disc:
+                    holders[h] = {'stance': (b or {}).get('stance') or ('known' if disc else None),
+                                  'value': jl(b['value_json']) if b and b.get('value_json') else None,
+                                  'since': (b or {}).get('chapter')}
+            matrix.append({'fact_key': f['fact_key'], 'truth': jl(f['truth_json']), 'secrecy': f['secrecy'],
+                           'reveal_after': f['reveal_after'], 'holders': holders})
+        # 伏笔-兑现配对:callback_key 相同的 Clue 与 Payoff/Reveal
+        callbacks = [s for s in stages if s.get('callback_key')]
+        paired = {s['callback_key'] for s in callbacks if s['stage_type'] in ('Payoff', 'Reveal')}
+        clues = [{'stage_id': s['id'], 'thread_key': s['thread_key'], 'chapter': s['chapter'],
+                  'callback_key': s['callback_key'], 'paid': s['callback_key'] in paired,
+                  'content': (s['content'] or '')[:80]} for s in callbacks if s['stage_type'] == 'Clue']
+        return {'chapter': at, 'threads': threads, 'stages': stages, 'mysteries': mysteries,
+                'emotion_debts': debts, 'belief_matrix': matrix, 'clue_ledger': clues}
+
+    def web_timeline(self, from_chapter=None, to_chapter=None, entity_key=None):
+        at = self._web_at(None)
+        lo = int(from_chapter or 1)
+        hi = int(to_chapter or at)
+        events = self.world_model.event_timeline(entity_key, lo, hi, 300)
+        with self.store.connect() as db:
+            if entity_key:
+                attr_rows = db.execute(
+                    'SELECT entity_key,attr_key,value_json,start_chapter FROM entity_attributes WHERE entity_key=? AND start_chapter BETWEEN ? AND ? ORDER BY start_chapter',
+                    (entity_key, lo, hi)).fetchall()
+                rel_rows = db.execute(
+                    'SELECT source_entity_key,relation_type,target_entity_key,start_chapter,end_chapter FROM entity_relations WHERE (source_entity_key=? OR target_entity_key=?) AND (start_chapter BETWEEN ? AND ? OR end_chapter BETWEEN ? AND ?) ORDER BY start_chapter',
+                    (entity_key, entity_key, lo, hi, lo, hi)).fetchall()
+            else:
+                attr_rows = db.execute(
+                    'SELECT entity_key,attr_key,value_json,start_chapter FROM entity_attributes WHERE start_chapter BETWEEN ? AND ? ORDER BY start_chapter LIMIT 200', (lo, hi)).fetchall()
+                rel_rows = db.execute(
+                    'SELECT source_entity_key,relation_type,target_entity_key,start_chapter,end_chapter FROM entity_relations WHERE start_chapter BETWEEN ? AND ? ORDER BY start_chapter LIMIT 200', (lo, hi)).fetchall()
+        attrs = [dict(r) | {'value': jl(r['value_json'])} for r in attr_rows]
+        for a in attrs: a.pop('value_json', None)
+        return {'from': lo, 'to': hi, 'entity_key': entity_key,
+                'events': events, 'attribute_changes': attrs, 'relation_changes': [dict(r) for r in rel_rows]}
+
+    def web_decision_answer(self, run_id: str, decision_id: str, answers: list) -> dict:
+        """Web HITL:把作者对 planner 提问的回答写入 blueprint.author_decisions,
+        然后以 resume 裁决该决策(与 scripts/stress/common.py 的自动作答同构,
+        只是答案来自人)。answers: [{question, answer}]。
+        """
+        if not isinstance(answers, list):
+            raise ValueError('answers must be an array of {question, answer}')
+        bp = self.planning.blueprint_get()
+        qa = (bp.get('blueprint') or {}).get('author_decisions') or []
+        answered = {x.get('question') for x in qa if isinstance(x, dict)}
+        added = 0
+        for a in answers:
+            if not isinstance(a, dict) or not a.get('question') or not str(a.get('answer', '')).strip():
+                continue
+            if a['question'] in answered:
+                qa = [x if x.get('question') != a['question'] else {**x, 'answer': str(a['answer'])} for x in qa]
+            else:
+                qa.append({'question': a['question'], 'answer': str(a['answer'])})
+            added += 1
+        if added:
+            self.planning.blueprint_update({'author_decisions': qa})
+        return self.runs.submit_decision(run_id, decision_id, {'action': 'resume'})

@@ -28,6 +28,7 @@ def main():
     p=sub.add_parser('run-pause'); p.add_argument('--db',required=True); p.add_argument('--run-id',required=True); p.add_argument('--reason',default='')
     p=sub.add_parser('run-decisions'); p.add_argument('--db',required=True); p.add_argument('--run-id',required=True); p.add_argument('--status',default='open')
     p=sub.add_parser('run-decision-submit'); p.add_argument('--db',required=True); p.add_argument('--run-id',required=True); p.add_argument('--decision-id',required=True); p.add_argument('--resolution',required=True,help='JSON string or path to JSON file')
+    p=sub.add_parser('web'); p.add_argument('--db',default=None); p.add_argument('--host',default='127.0.0.1'); p.add_argument('--port',type=int,default=8080); p.add_argument('--static',default=None); p.add_argument('--reference-root',default=None); p.add_argument('--narrative-kg-root',dest='nkg_root',default=None)
     a=ap.parse_args()
     if a.cmd=='init-story':
         s=StoryStore(a.db); s.set_meta('title',a.title); s.set_meta('main_goal',a.main_goal); s.set_meta('current_arc',a.current_arc)
@@ -60,6 +61,10 @@ def main():
         elif a.cmd=='run-resume': out=svc.novel_run_resume(a.run_id)
         elif a.cmd=='run-report': out=svc.novel_run_report(a.run_id,True)
         elif a.cmd=='run-decisions': out=svc.novel_run_decision_list(a.run_id,a.status)
+        elif a.cmd=='web':
+            from .web_api import run as web_run
+            web_run(a.db,a.host,a.port,a.static,a.reference_root,a.nkg_root)
+            return
         else:
             raw=a.resolution
             p=Path(raw)

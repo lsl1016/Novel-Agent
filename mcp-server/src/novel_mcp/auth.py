@@ -2,6 +2,8 @@
 
 角色与授权:
 
+* viewer     — 读者模式(Web 工作台):仅运行状态读与正典正文浏览,
+               经由 BFF 聚合读端点获得裁剪载荷;草稿/真相/规划一律不可见。
 * writer     — prose-safe 读 + 草稿写;不得触碰任何作者层真相
                (belief_get/entity_author_get/assertion_list 均不授权,
                context_* 强制 writer 视角参数)。
@@ -26,6 +28,12 @@ READS_PROSE_SAFE = {
     'entity_graph_stats', 'entity_retrieve_relevant', 'narrative_retrieve_relevant',
     'event_get', 'event_timeline', 'geography_tree_get',
     'chapter_plan_check', 'continuity_check', 'story_pressure_check', 'planning_pressure_check',
+}
+
+# viewer(读者模式)只允许看"已经发生的事":运行状态与正典正文经 BFF 聚合读端点
+# 提供(载荷裁剪在 web_api 层);工具面仅放行只读的运行状态查询。
+VIEWER_TOOLS = {
+    'novel_run_status',
 }
 
 WRITER_TOOLS = READS_PROSE_SAFE | {
@@ -68,6 +76,7 @@ CONTROLLER_TOOLS = {
 }
 
 ROLE_TOOLS: dict[str, set[str]] = {
+    'viewer': VIEWER_TOOLS,
     'writer': WRITER_TOOLS,
     'reviewer': REVIEWER_TOOLS,
     'planner': PLANNER_TOOLS,
@@ -125,7 +134,8 @@ def resolve_role(headers: dict[str, str]) -> tuple[str | None, int]:
         tokens.setdefault(legacy, 'admin')
     if not tokens:
         return 'admin', 0
-    presented = (headers.get('Authorization') or '').strip()
+    lowered = {str(k).lower(): v for k, v in (headers or {}).items()}
+    presented = (lowered.get('authorization') or '').strip()
     token = presented[7:].strip() if presented.lower().startswith('bearer ') else ''
     if not token or token not in tokens:
         return None, 40101

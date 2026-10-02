@@ -8,3 +8,7 @@ story-data/semantic_cache/
 __pycache__/
 *.pyc
 .DS_Store
+frontend/node_modules/
+frontend/tsconfig.tsbuildinfo
+*.tsbuildinfo
+story-data/*.log
