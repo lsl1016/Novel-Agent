@@ -26,6 +26,27 @@ def architect_model_configured() -> bool:
     return configured('NOVEL_ARCHITECT', ('NOVEL_PLANNER', 'NKG_LLM'))
 
 
+def interview(idea: str, options: dict | None = None, call=None) -> dict:
+    """Generate an idea-specific interview before architecture generation."""
+    if not str(idea).strip():
+        raise ValueError('请先输入故事创意')
+    if call is None and not architect_model_configured():
+        raise ValueError('尚未配置创作模型；可填写自主创作约束后继续')
+    out = (call or _call)(
+        '你是一位小说策划编辑。针对创意提出最多4个会改变故事走向的具体问题，'
+        '覆盖主角动机、结局、叙事节奏与禁忌。不要重复用户已明确的信息。'
+        '只返回 JSON: {"questions":[{"question":"中文问题","options":["选项一","选项二","选项三"]}]}。',
+        json.dumps({'idea': idea, 'options': options or {}}, ensure_ascii=False))
+    questions = []
+    for q in out.get('questions', [])[:4]:
+        if isinstance(q, dict) and str(q.get('question') or '').strip():
+            questions.append({'question': str(q['question']),
+                              'options': [str(x) for x in q.get('options', []) if isinstance(x, str)][:3]})
+    if not questions:
+        raise ValueError('模型未返回有效的访谈问题，请重试或自主填写约束')
+    return {'questions': questions}
+
+
 def scale_params(target_total_chapters: int) -> dict:
     """规模护栏公式(设计稿 §7),写进 prompt 并由校验器复核。"""
     t = max(20, int(target_total_chapters or 300))
@@ -68,8 +89,9 @@ def _s1_prompt() -> str:
 1. world_facts 2-4 条,全部 secrecy=secret;终局真相 reveal_after 落在 scale.final_reveal_window,中期真相落在 scale.mid_reveal_window。
 2. hard_constraints 至少 1 条与真相揭示窗口绑定。
 3. protagonist 固定为占位键 "hero"(后续阶段必须落位该实体)。
-4. author_decisions 预置 2-3 条高杠杆创作决策(成长节奏/感情线尺度/黑暗程度),给后续章节规划器自动拍板用。
-5. 若用户给了 counter_expectation,把"避开该题材最俗的三件事"写进 hard_constraints。'''
+4. author_decisions 优先逐条保留 options.author_decisions 的作者访谈原答，不得改写或反转；仅对未回答的问题补充 2-3 条高杠杆创作假设，并逐条加入 assumptions 待作者确认。
+5. 若用户给了 counter_expectation,把"避开该题材最俗的三件事"写进 hard_constraints。
+6. options.hard_constraints 是作者已确认的约束，必须保留；被作者否决的假设及其替代要求必须落实，不能再次作为默认设定。'''
 
 
 def _s2_prompt() -> str:

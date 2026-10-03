@@ -38,7 +38,7 @@
 |---|---|---|
 | 官方 MCP SDK v2 | `mcp run server.py`(stdio / streamable-http) | 标准 MCP 客户端,需 `pip install 'mcp>=2,<3'` |
 | 零依赖 stdio | `novel-mcp-compat`(JSON-RPC: initialize/tools/list/tools/call) | 本地兼容、冒烟 |
-| HTTP 门面 | `POST /mcp` + `POST /api/agent/tools/call/{name}` | 通用网关(lsl1016/mcp-server 批量注册,见 registration/),带 errNo 信封与角色鉴权 |
+| HTTP 门面 | `POST /mcp` + `POST /api/agent/tools/call/{name}` | 通用网关(lsl1016/mcp-server 批量注册,见 registration/),带 errNo 信封，公开访问 |
 
 连接配置见 `docs/client-configs.md`;skill 从 `dist/skill.zip` 安装。
 
@@ -61,7 +61,7 @@
 | 规划 / 写作 / 审校 / 修订 / 提交 / Run 控制(≈25 工具) | ✅ 等效执行(进程内) | ✅ 逐工具调用 |
 | Reference Graph 结构学习 | ✅(planner 上下文自动携带 reference_patterns) | ✅ `narrative_pattern_search` |
 | 作者侧工具:实体/身份档案/断言/披露/候选晋升/世界真相编辑 | ❌ 不在自动路径(planner 不声明这些组) | ✅ 专属操作面 |
-| 一句话开书(架构生成 `novel_architecture_generate`) | ❌(开书是显式人工/agent 动作,不在无人值守路径) | ✅ planner/admin 白名单;推荐两步:生成 → 审阅 → `story_architect_apply` |
+| 一句话开书(架构生成 `novel_architecture_generate`) | ❌(开书是显式人工/agent 动作,不在无人值守路径) | ✅ 无角色限制;推荐:生成 → 审阅 → `story_architect_apply` |
 | 正文由谁写 | 服务端配置的 writer 模型 | agent 自己(`chapter_draft_save(source='external')`)或内置模型 |
 
 ## 5. 外部 Agent 的三种用法
@@ -76,5 +76,5 @@
 
 1. **语义审校依赖服务端模型配置**(`NOVEL_REVIEWER_*`):确定性 4 项零配置可用;语义 4 项需要配置。外部 agent 想自己当语义审校者也行(reviewer 角色可见作者层真相),但"findings 不得回显隐藏真值"的脱敏在服务端路径是代码强制(`redact_hidden_values`),在外部 agent 路径靠 skill 纪律自觉。
 2. **内置模型工具 vs agent 自写**:`chapter_draft_generate` / `chapter_auto_revise` 用服务端配置的模型;agent 用自身能力时应走 `chapter_draft_save` / `chapter_revision_context_get`。
-3. **权限**:经 HTTP 门面接入时用 `NOVEL_FACADE_TOKENS` 按角色发令牌(writer/reviewer/planner/controller/admin,见 `novel_mcp/auth.py`);writer 角色额外受参数守卫(只能编译 writer 视角上下文)。
+3. **公开访问（2026-10-03）**:项目不设置用户权限，`NOVEL_FACADE_TOKENS` 不再生效；全部公开工具均可使用。上下文编译器的叙事知识过滤属于模型创作纪律，不是用户权限，不能当作访问控制。
 4. **两条路共享同一 Story DB 与 Commit Gate**:长跑到一半,外部 agent 可随时用 MCP 工具检查、接管、回放(`context_snapshot_get` / `context_explain` 可解释任意章节"模型当时看到了什么")。

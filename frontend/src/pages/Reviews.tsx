@@ -1,113 +1,213 @@
-import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { api } from '../api/client'
-import { Card, Pill, verdictTone } from '../components/ui'
-
-const REVIEWERS = [
-  'knowledge_leak', 'continuity', 'narrative', 'character',
-  'semantic_knowledge_leak', 'semantic_character', 'semantic_narrative', 'semantic_pacing',
+import { useApi, useQuery, useFilters, useChapterCursor, BookLink } from '../api/scope'
+import { Card, Drawer, PageHeader, PageState, SegmentedControl, StatusBadge } from '../components/ui'
+import { label } from '../components/labels'
+const reviewers = [
+  'knowledge_leak',
+  'continuity',
+  'narrative',
+  'character',
+  'semantic_knowledge_leak',
+  'semantic_character',
+  'semantic_narrative',
+  'semantic_pacing',
 ]
-
-function rLabel(t: string) {
-  return ({
-    knowledge_leak: '泄漏', continuity: '连续', narrative: '叙事', character: '人物',
-    semantic_knowledge_leak: '语·泄', semantic_character: '语·人', semantic_narrative: '语·叙', semantic_pacing: '语·奏',
-  } as any)[t] || t
-}
-
-/** 审校中心(D3):章节 × 审校器结论矩阵 + 发现收件箱 + 修订收敛 */
 export default function Reviews() {
-  const navigate = useNavigate()
-  const [scope, setScope] = useState(10)
-  const { data } = useQuery({ queryKey: ['reviews', scope], queryFn: () => api.get(`/api/v1/reviews?from=1&to=999`), refetchInterval: 30000 })
-  const chapters = (data?.chapters || []).slice(-scope)
-  const findings: { ch: number; type: string; verdict: string; f: any }[] = []
-  for (const c of chapters) {
-    for (const r of c.reviews || []) {
-      for (const f of r.findings || []) findings.push({ ch: c.chapter, type: r.reviewer_type, verdict: r.verdict, f })
-    }
-  }
-  findings.sort((a, b) => (a.verdict === 'BLOCK' ? -1 : b.verdict === 'BLOCK' ? 1 : b.ch - a.ch))
-  const blocks = findings.filter((x) => x.verdict === 'BLOCK')
-
+  const api = useApi(),
+    { chapter } = useChapterCursor(),
+    { params, patch } = useFilters(),
+    scope = Number(params.get('scope')) || (params.get('severity') || params.get('finding') ? 9999 : 10),
+    severity = params.get('severity') || '',
+    type = params.get('type') || ''
+  const query = useQuery({
+    queryKey: ['reviews'],
+    queryFn: () => api.get('/api/v1/reviews?from=1&to=9999'),
+    refetchInterval: 30000,
+  })
+  const chapters = (query.data?.chapters || [])
+    .filter((c: any) => !chapter || c.chapter <= chapter)
+    .slice(-scope)
+    .map((c: any) => ({
+      ...c,
+      reviews: c.reviews.filter(
+        (r: any) =>
+          r.draft_version ===
+          (c.latest_draft_version ?? Math.max(...c.reviews.map((v: any) => v.draft_version), 0)),
+      ),
+    }))
+  const findings = chapters
+    .flatMap((c: any) =>
+      c.reviews.flatMap((r: any) =>
+        (r.findings || []).map((f: any, i: number) => ({
+          ...f,
+          chapter: c.chapter,
+          version: r.draft_version,
+          type: r.reviewer_type,
+          verdict: r.verdict,
+          key: `${c.chapter}:${r.draft_version}:${r.reviewer_type}:${i}`,
+          anchor: r.reviewer_type + ':' + i,
+        })),
+      ),
+    )
+    .filter((f: any) => (!severity || f.verdict === severity) && (!type || f.type === type))
+    .sort(
+      (a: any, b: any) =>
+        Number(b.verdict === 'BLOCK') - Number(a.verdict === 'BLOCK') || b.chapter - a.chapter,
+    )
+  const selected = findings.find((f: any) => f.key === params.get('finding'))
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-      <Card title="全书审校矩阵" extra={
-        <span style={{ display: 'inline-flex', gap: 10, alignItems: 'center' }}>
-          {[5, 10, 20, 40].map((n) => (
-            <button key={n} className={`btn sm${scope === n ? ' primary' : ''}`} onClick={() => setScope(n)}>近 {n} 章</button>
-          ))}
-          {blocks.length > 0 ? <Pill tone="block">{blocks.length} BLOCK</Pill> : <Pill tone="pass">无 BLOCK</Pill>}
-        </span>
-      }>
-        <div style={{ overflowX: 'auto' }}>
-          <table style={{ borderCollapse: 'separate', borderSpacing: 4 }}>
-            <thead>
-              <tr>
-                <th style={{ padding: '0 8px', color: 'var(--muted)', fontSize: 11.5, textAlign: 'left' }}>章</th>
-                {REVIEWERS.map((r) => <th key={r} style={{ color: 'var(--muted)', fontSize: 11, fontWeight: 500 }}>{rLabel(r)}</th>)}
-              </tr>
-            </thead>
-            <tbody>
-              {chapters.map((c: any) => (
-                <tr key={c.chapter}>
-                  <td className="mono" style={{ color: 'var(--sem-canon)' }}>{c.chapter}</td>
-                  {REVIEWERS.map((rt) => {
-                    const r = (c.reviews || []).find((x: any) => x.reviewer_type === rt)
-                    const v = r?.verdict
-                    const n = r?.findings?.length || 0
-                    return (
-                      <td key={rt} style={{ padding: 0 }}>
-                        <div className={`heat ${v ? v.toLowerCase() : 'unknown'}`} style={{ minWidth: 46, padding: '4px 2px', cursor: v ? 'pointer' : 'default' }}
-                          title={v ? `ch${c.chapter} ${rt} ${v}${n ? ` (${n} 项发现)` : ''}` : '未审'}
-                          onClick={() => v && navigate(`/studio/${c.chapter}`)}>
-                          <span style={{ fontSize: 11 }}>{v ? rLabel(v === 'PASS' ? '通过' : v === 'WARN' ? `警${n || ''}` : '阻断') : '—'}</span>
-                        </div>
-                      </td>
-                    )
-                  })}
-                </tr>
-              ))}
-            </tbody>
-          </table>
+    <div className="page-stack">
+      <PageHeader
+        title="审校中心"
+        description={`${chapter ? '截至第 ' + chapter + ' 章' : '最新章节时间点'} · 当前草稿版本的审校结果`}
+      />
+      <Card>
+        <div className="toolbar">
+          <SegmentedControl
+            value={String(scope)}
+            onChange={(v) => patch({ scope: v })}
+            options={[10, 20, 40, 9999].map((n) => ({
+              value: String(n),
+              label: n === 9999 ? '全部章节' : '近 ' + n + ' 章',
+            }))}
+          />
+          <select
+            className="input"
+            aria-label="审校严重度"
+            value={severity}
+            onChange={(e) => patch({ severity: e.target.value, scope: 9999 })}
+          >
+            <option value="">全部发现</option>
+            <option value="BLOCK">阻断</option>
+            <option value="WARN">警告</option>
+          </select>
+          <select
+            className="input"
+            aria-label="审校类别"
+            value={type}
+            onChange={(e) => patch({ type: e.target.value })}
+          >
+            <option value="">全部类别</option>
+            {reviewers.map((t) => (
+              <option key={t} value={t}>
+                {label(t)}
+              </option>
+            ))}
+          </select>
         </div>
       </Card>
-
-      <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 14 }}>
-        <Card title={`发现收件箱(${findings.length})`} extra={<span style={{ color: 'var(--muted)', fontSize: 11.5 }}>BLOCK 置顶 · 点击跳章节</span>}>
-          <div style={{ maxHeight: 380, overflow: 'auto' }}>
-            {findings.slice(0, 60).map((x, i) => (
-              <div key={i} className="row-hover" onClick={() => navigate(`/studio/${x.ch}`)}
-                style={{ display: 'flex', gap: 8, alignItems: 'baseline', padding: '4px 6px', borderBottom: '1px solid var(--line)', fontSize: 12.5, borderRadius: 4 }}>
-                <span className="mono" style={{ color: 'var(--sem-canon)', minWidth: 34 }}>ch{x.ch}</span>
-                <Pill tone={verdictTone(x.verdict)}>{x.verdict}</Pill>
-                <span style={{ color: 'var(--muted)', minWidth: 52 }}>{rLabel(x.type)}</span>
-                <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  <code style={{ fontSize: 11, color: 'var(--sem-warn)' }}>{x.f.code}</code> {x.f.message}
-                </span>
-              </div>
-            ))}
-            {findings.length === 0 && <div style={{ color: 'var(--muted)' }}>最近章节无审校发现。</div>}
-          </div>
-        </Card>
-        <Card title="修订收敛(多版本章节)">
-          {Object.entries(data?.convergence || {}).map(([ch, versions]: any) => (
-            <div key={ch} style={{ padding: '6px 0', borderBottom: '1px solid var(--line)' }}>
-              <div style={{ fontSize: 13, marginBottom: 4 }}>第 {ch} 章 <span style={{ color: 'var(--muted)', fontSize: 12 }}>发现数逐版本收敛:</span></div>
-              <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end', height: 40 }}>
-                {versions.map((v: any) => (
-                  <div key={v.version} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                    <div style={{ width: 26, height: Math.min(36, v.findings * 4 + 4), background: v.findings ? 'var(--sem-warn)' : 'var(--sem-pass)', opacity: .7, borderRadius: 3 }} />
-                    <span className="mono" style={{ fontSize: 10.5, color: 'var(--muted)' }}>v{v.version}:{v.findings}</span>
-                  </div>
-                ))}
-              </div>
+      <PageState loading={query.isPending} error={query.error} onRetry={() => void query.refetch()} />
+      {query.data && (
+        <>
+          <Card title="章节审校矩阵">
+            <div className="axis-scroll">
+              <table className="review-matrix">
+                <thead>
+                  <tr>
+                    <th>章节</th>
+                    {reviewers.map((t) => (
+                      <th key={t}>{label(t)}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {chapters.map((c: any) => (
+                    <tr key={c.chapter}>
+                      <th>第 {c.chapter} 章</th>
+                      {reviewers.map((t) => {
+                        const r = c.reviews.find((v: any) => v.reviewer_type === t)
+                        return (
+                          <td key={t}>
+                            {r ? (
+                              <BookLink to={`/studio/${c.chapter}?mode=draft&version=${r.draft_version}`}>
+                                <StatusBadge status={r.verdict} />
+                              </BookLink>
+                            ) : (
+                              <span className="muted">未审</span>
+                            )}
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-          ))}
-          {Object.keys(data?.convergence || {}).length === 0 && <div style={{ color: 'var(--muted)' }}>最近章节均为一稿过门。</div>}
-        </Card>
-      </div>
+          </Card>
+          <div className="two-columns">
+            <Card title={`发现收件箱 · ${findings.length} 项`}>
+              {findings.length ? (
+                findings.map((f: any) => (
+                  <button
+                    className="finding-card"
+                    key={f.key}
+                    onClick={() => patch({ finding: f.key }, false)}
+                  >
+                    <div className="toolbar">
+                      <StatusBadge status={f.verdict} />
+                      <small>
+                        第 {f.chapter} 章 · v{f.version} · {label(f.type)}
+                      </small>
+                    </div>
+                    <p>{f.message}</p>
+                    <span className="text-btn">查看证据与建议 →</span>
+                  </button>
+                ))
+              ) : (
+                <PageState empty title="当前筛选下没有审校发现" />
+              )}
+            </Card>
+            <Card title="修订收敛">
+              {Object.entries(query.data.convergence || {}).map(([ch, versions]: any) => (
+                <div className="convergence-row" key={ch}>
+                  <BookLink to={'/studio/' + ch}>第 {ch} 章</BookLink>
+                  <div className="toolbar">
+                    {versions.map((v: any) => (
+                      <BookLink
+                        className="tag"
+                        key={v.version}
+                        to={`/studio/${ch}?mode=diff&version=${v.version}`}
+                      >
+                        v{v.version} · {v.findings} 项
+                      </BookLink>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {!Object.keys(query.data.convergence || {}).length && (
+                <p className="muted small">出现多个草稿版本后，这里展示发现数的变化。</p>
+              )}
+            </Card>
+          </div>
+        </>
+      )}
+      {params.get('finding') && (
+        <Drawer title="审校发现" onClose={() => patch({ finding: null })}>
+          {selected ? (
+            <>
+              <StatusBadge status={selected.verdict} />
+              <p>{selected.message}</p>
+              {selected.evidence && <blockquote>{selected.evidence}</blockquote>}
+              {selected.suggestion && <p>{selected.suggestion}</p>}
+              <BookLink
+                className="btn primary"
+                to={`/studio/${selected.chapter}?mode=draft&version=${selected.version}&finding=${encodeURIComponent(selected.anchor)}`}
+              >
+                定位正文并修订 →
+              </BookLink>
+              <details>
+                <summary>技术标识</summary>
+                {selected.code}
+              </details>
+            </>
+          ) : (
+            <PageState empty title="该发现不在当前筛选结果内">
+              <button className="btn" onClick={() => patch({ scope: 9999, severity: null, type: null })}>
+                查看全部发现
+              </button>
+            </PageState>
+          )}
+        </Drawer>
+      )}
     </div>
   )
 }

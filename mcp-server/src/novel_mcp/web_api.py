@@ -6,13 +6,12 @@
 * ``GET /api/v1/...``    — 聚合读端点(NovelService.web_* 只读方法)
 * ``GET /api/v1/stream/runs/{id}`` — SSE 运行事件流(``?once=1`` 推一拍即断,供测试)
 * ``POST /api/v1/actions/{tool}``  — 快写动作透传 ``http_compat.facade_call``,
-  与外部 Agent 走完全相同的权限/校验/闸门路径。BFF 自身没有第二条写路径。
+  与外部 Agent 走完全相同的校验/闸门路径。BFF 自身没有第二条写路径。
 * ``POST /api/v1/jobs/{tool}``     — 慢操作(LLM 分钟级)后台作业:线程执行 +
   ``GET /api/v1/jobs/{id}`` 轮询(生成/审校/修订/规划)。
 * 多书:端点统一接受 ``?book=<名>``,服务实例按库路径缓存;书库默认 ``story-data/``。
 
-鉴权复用 auth.py(``NOVEL_FACADE_TOKENS``);``viewer`` 即读者模式:
-草稿/规划/压力等作者层载荷在服务端裁剪,不是前端隐藏。
+工作台公开访问，无登录或用户权限；模型上下文和正典校验仍由运行时负责。
 """
 from __future__ import annotations
 
@@ -34,33 +33,13 @@ from . import runtime
 API = '/api/v1'
 SSE_POLL_SECONDS = 1.5
 
-# 端点 × 角色:viewer 只见正典与运行状态;草稿与实时流水属作者层。
-READ_ROLES = {
-    'home': frozenset({'viewer', 'writer', 'reviewer', 'planner', 'controller', 'admin'}),
-    'runs': frozenset({'viewer', 'writer', 'reviewer', 'planner', 'controller', 'admin'}),
-    'run': frozenset({'viewer', 'writer', 'reviewer', 'planner', 'controller', 'admin'}),
-    'chapter': frozenset({'viewer', 'writer', 'reviewer', 'planner', 'controller', 'admin'}),
-    'draft': frozenset({'writer', 'reviewer', 'planner', 'controller', 'admin'}),
-    'stream': frozenset({'writer', 'reviewer', 'planner', 'controller', 'admin'}),
-    # D2/D3 作者层:含世界真相/信念矩阵/秘密边/规划,writer 与 viewer 均不可见
-    'entities': frozenset({'reviewer', 'planner', 'controller', 'admin'}),
-    'entity': frozenset({'reviewer', 'planner', 'controller', 'admin'}),
-    'graph': frozenset({'reviewer', 'planner', 'controller', 'admin'}),
-    'board': frozenset({'reviewer', 'planner', 'controller', 'admin'}),
-    'timeline': frozenset({'reviewer', 'planner', 'controller', 'admin'}),
-    'reviews': frozenset({'reviewer', 'planner', 'controller', 'admin'}),
-    'plan': frozenset({'reviewer', 'planner', 'controller', 'admin'}),
-    'settings': frozenset({'planner', 'admin'}),
-    'jobs': frozenset({'planner', 'controller', 'admin'}),
-    'books': frozenset({'viewer', 'writer', 'reviewer', 'planner', 'controller', 'admin'}),
-    'export': frozenset({'viewer', 'writer', 'reviewer', 'planner', 'controller', 'admin'}),
-}
-
-# 慢操作白名单(分钟级 LLM 调用,走作业执行器;权限仍按角色白名单)
+# 慢操作工具集（分钟级任务走后台执行，所有用户均可调用）
 JOB_TOOLS = frozenset({
     'novel_architecture_generate', 'story_architect_apply', 'chapter_plan_generate', 'chapter_direction_propose', 'chapter_semantic_review',
     'chapter_review_full', 'chapter_auto_revise', 'chapter_auto_revision_loop',
     'chapter_draft_generate',
+    'story_architect_interview',
+    'novel_run_continue',
 })
 
 # 多书:db 路径 → NovelService 实例缓存(默认书仍走 runtime 单例,便于测试注入)
@@ -110,7 +89,8 @@ def create_book(name: str) -> dict:
 def list_books() -> list[dict]:
     out = []
     import sqlite3
-    root = books_dir()
+    from pathlib import Path
+    root = os.path.abspath(books_dir())
     default_db = os.path.abspath(os.environ.get('NOVEL_STORY_DB') or './story-data/story.db')
     if not os.path.isdir(root):
         return out
@@ -118,30 +98,38 @@ def list_books() -> list[dict]:
         if not fn.endswith('.db') or fn.endswith(('-wal', '-shm')):
             continue
         path = os.path.join(root, fn)
-        try:
-            db = sqlite3.connect(f'file:{path}?mode=ro', uri=True)
-            db.row_factory = sqlite3.Row
-            title = None
+        # A copied WAL database may lack its shared-memory sidecar. SQLite cannot
+        # always initialize it via mode=ro. Fall back to an existing-file-only
+        # connection with SQL writes disabled; never use immutable=1 (loses WAL).
+        for mode in ('ro', 'rw'):
+            db = None
             try:
-                r = db.execute('SELECT payload_json FROM planning_blueprint WHERE id=1').fetchone()
-                if r:
-                    import json as _json
-                    title = (_json.loads(r['payload_json'] or '{}') or {}).get('title')
-            except Exception:
-                pass
-            if not title:
+                db = sqlite3.connect(Path(path).as_uri() + '?mode=' + mode, uri=True)
+                db.execute('PRAGMA query_only=ON')
+                db.row_factory = sqlite3.Row
+                title = None
                 try:
-                    title = db.execute("SELECT value FROM meta WHERE key='title'").fetchone()
-                    title = title[0] if title else None
-                except Exception:
-                    title = None
-            cnt = db.execute('SELECT COUNT(*) c, COALESCE(SUM(LENGTH(body)),0) s FROM chapters').fetchone()
-            db.close()
-            out.append({'name': fn, 'title': title or fn[:-3], 'chapters': cnt['c'],
-                        'chars': cnt['s'], 'default': path == default_db,
-                        'updated_at': time.strftime('%Y-%m-%d %H:%M', time.localtime(os.path.getmtime(path)))})
-        except Exception:
-            continue
+                    r = db.execute('SELECT payload_json FROM planning_blueprint WHERE id=1').fetchone()
+                    if r:
+                        title = (json.loads(r['payload_json'] or '{}') or {}).get('title')
+                except (sqlite3.Error, ValueError):
+                    pass
+                if not title:
+                    try:
+                        row = db.execute("SELECT value FROM meta WHERE key='title'").fetchone()
+                        title = row[0] if row else None
+                    except sqlite3.Error:
+                        pass
+                cnt = db.execute('SELECT COUNT(*) c, COALESCE(SUM(LENGTH(body)),0) s FROM chapters').fetchone()
+                out.append({'name': fn, 'title': title or fn[:-3], 'chapters': cnt['c'],
+                            'chars': cnt['s'], 'default': path == default_db,
+                            'updated_at': time.strftime('%Y-%m-%d %H:%M', time.localtime(os.path.getmtime(path)))})
+                break
+            except (sqlite3.Error, OSError):
+                continue
+            finally:
+                if db is not None:
+                    db.close()
     return out
 
 
@@ -166,7 +154,10 @@ class Handler(BaseHTTPRequestHandler):
         for k, v in (headers or {}).items():
             self.send_header(k, v)
         self.end_headers()
-        self.wfile.write(data)
+        try:
+            self.wfile.write(data)
+        except (BrokenPipeError, ConnectionResetError):
+            pass  # Switching books intentionally cancels in-flight requests.
 
     def _read_json(self) -> dict:
         n = int(self.headers.get('Content-Length', '0'))
@@ -179,33 +170,14 @@ class Handler(BaseHTTPRequestHandler):
         return value
 
     def _role(self):
-        """返回 (role, status)。status=0 通过;401 未认证。
-
-        EventSource 无法携带 Authorization 头,故 SSE 场景允许 ``?token=``
-        查询参数作为等价凭证(本地工具,日志暴露面可接受)。
-        """
-        if not auth.auth_enabled():
-            return 'admin', 0
-        headers = {k.lower(): v for k, v in self.headers.items()}
-        if 'authorization' not in headers:
-            q = parse_qs(urlparse(self.path).query)
-            if q.get('token'):
-                headers['authorization'] = f'Bearer {q["token"][0]}'
-        role, err = auth.resolve_role(headers)
-        return role, err
+        return 'admin', 0
 
     def _require_role(self, endpoint: str):
-        role, err = self._role()
-        if err != 0:
-            self._json(401, {'error': {'code': 'UNAUTHORIZED', 'message': 'token required'}})
-            return None
-        if role not in READ_ROLES.get(endpoint, READ_ROLES['chapter']):
-            self._json(403, {'error': {'code': 'FORBIDDEN', 'message': f'role {role} cannot read {endpoint}'}})
-            return None
-        return role
+        # Compatibility helper for existing route handlers; the workspace is public.
+        return 'admin'
 
     def _q(self, parsed, key, default=None):
-        q = parse_qs(parsed.query)
+        q = parse_qs(parsed.query, keep_blank_values=True)
         return q[key][0] if q.get(key) else default
 
     def _svc(self, parsed):
@@ -231,6 +203,8 @@ class Handler(BaseHTTPRequestHandler):
                     self._json(200, {'books': list_books(), 'books_dir': books_dir()})
             elif path == '/api/v1/settings':
                 self._get_settings(parsed)
+            elif path == '/api/v1/architecture':
+                self._json(200, self._svc(parsed).web_architecture())
             elif path == '/api/v1/entities':
                 self._get_entities(parsed)
             elif path == '/api/v1/graph':
@@ -292,9 +266,6 @@ class Handler(BaseHTTPRequestHandler):
             role = self._require_role('books')
             if not role:
                 return
-            if role not in ('planner', 'admin'):
-                self._json(403, {'error': {'code': 'FORBIDDEN', 'message': f'role {role} cannot create books'}})
-                return
             try:
                 body = self._read_json()
                 out = create_book(str(body.get('name') or '').strip())
@@ -314,12 +285,9 @@ class Handler(BaseHTTPRequestHandler):
             role = self._require_role('stream')
             if not role:
                 return
-            if role not in ('controller', 'admin'):
-                self._json(403, {'error': {'code': 'FORBIDDEN', 'message': f'role {role} cannot resolve decisions'}})
-                return
             try:
                 body = self._read_json()
-                out = service_for(body.get('book')).web_decision_answer(m.group(1), m.group(2), body.get('answers') or [])
+                out = service_for(self._q(parsed, 'book', body.get('book'))).web_decision_answer(m.group(1), m.group(2), body.get('answers') or [])
                 self._json(200, {'ok': True, 'result': out})
             except KeyError as e:
                 self._json(404, {'error': {'code': 'NOT_FOUND', 'message': str(e)}})
@@ -338,17 +306,13 @@ class Handler(BaseHTTPRequestHandler):
             return
         name = path[len('/api/v1/actions/'):].strip('/')
         headers = {k.lower(): v for k, v in self.headers.items()}
-        book = body.pop('book', None) if isinstance(body, dict) else None
+        book = self._q(parsed, 'book', body.pop('book', None))
         if book:
-            # book 作用域动作:与 facade_call 同一道 tool_allowed 闸门,
-            # 仅把分发目标从默认书单例换成多书服务实例。
-            role, err = self._role()
-            if err != 0:
-                self._json(401, {'errNo': 40101, 'errMsg': 'unauthorized', 'data': None}); return
-            ok, reason = auth.tool_allowed(role, name, body)
-            if not ok:
-                self._json(200, {'errNo': 40301, 'errMsg': f'role {role} denied: {reason}', 'data': None}); return
+            # Resolve every write to the same explicit book as reads.
             try:
+                from .tooldefs import TOOLS
+                if name not in {t['name'] for t in TOOLS}:
+                    raise KeyError(f'unknown tool: {name}')
                 data = getattr(service_for(book), name)(**body)
                 out = (200, {'errNo': 0, 'errMsg': 'success', 'data': data})
             except KeyError as e:
@@ -358,7 +322,7 @@ class Handler(BaseHTTPRequestHandler):
             except Exception as e:
                 out = (200, {'errNo': 50001, 'errMsg': str(e), 'data': None})
             self._json(out[0], out[1]); return
-        status, out = facade_call(name, body, headers)  # 权限/闸门/校验全部在既有路径里
+        status, out = facade_call(name, body, headers)  # 业务校验与正典闸门仍在既有路径里
         self._json(status, out)
 
     # ---- D3 端点 ----
@@ -376,11 +340,10 @@ class Handler(BaseHTTPRequestHandler):
                 'model': os.environ.get(var + 'MODEL') or os.environ.get('NOVEL_PLANNER_MODEL'),
                 'key_set': bool(os.environ.get(var + 'API_KEY') or os.environ.get('NOVEL_PLANNER_API_KEY')),
             }
-        tokens_cfg = bool(os.environ.get('NOVEL_FACADE_TOKENS', '').strip())
         self._json(200, {
-            'book': {'db': os.environ.get('NOVEL_STORY_DB'), 'books_dir': books_dir()},
+            'book': {'db': str(self._svc(parsed).store.path), 'books_dir': books_dir()},
             'models': roles,
-            'facade_auth': {'enabled': tokens_cfg, 'open_mode_note': '未配置 NOVEL_FACADE_TOKENS 时为本地开放模式(admin)'},
+            'facade_auth': {'enabled': False, 'open_mode_note': '公开工作台，无需登录，全部功能可用'},
             'reference_root': os.environ.get('NOVEL_REFERENCE_ROOT'),
         })
 
@@ -429,20 +392,32 @@ class Handler(BaseHTTPRequestHandler):
             self._json(400, {'error': {'code': 'BAD_REQUEST', 'message': str(e)}})
             return
         args = body.get('args') or {}
-        ok, reason = auth.tool_allowed(role, tool, args)
-        if not ok:
-            self._json(403, {'error': {'code': 'FORBIDDEN', 'message': reason}})
+        try:
+            book = self._q(urlparse(self.path), 'book', body.get('book'))
+            svc = service_for(book)
+        except (KeyError, ValueError) as e:
+            self._json(404, {'error': {'code': 'NOT_FOUND', 'message': str(e)}})
             return
         job_id = 'job_' + uuid.uuid4().hex[:12]
-        job = {'id': job_id, 'tool': tool, 'status': 'running', 'started_at': time.time(), 'result': None, 'error': None}
+        book_path = str(svc.store.path.resolve())
+        job = {'id': job_id, 'book': book, 'book_path': book_path, 'args': args, 'tool': tool, 'status': 'running', 'started_at': time.time(), 'result': None, 'error': None}
         with _JOB_LOCK:
+            if tool == 'novel_run_continue':
+                existing = next((j for j in _JOBS.values() if j['status'] == 'running' and
+                                 j['tool'] == tool and j.get('book_path') == book_path and
+                                 j.get('args', {}).get('run_id') == args.get('run_id')), None)
+                if existing:
+                    self._json(200, {'ok': True, 'job': existing})
+                    return
             _JOBS[job_id] = job
 
         def run():
             try:
-                svc = service_for(body.get('book'))
                 fn = getattr(svc, tool)
                 job['result'] = fn(**args) if isinstance(args, dict) else fn(args)
+                if isinstance(job['result'], dict) and job['result'].get('ok') is False:
+                    err = job['result'].get('error') or job['result'].get('errors') or '操作未完成'
+                    raise ValueError(err.get('message', str(err)) if isinstance(err, dict) else str(err))
                 job['status'] = 'done'
             except Exception as e:
                 job['error'] = f'{type(e).__name__}: {e}'
@@ -471,14 +446,6 @@ class Handler(BaseHTTPRequestHandler):
             return
         chapter = self._q(parsed, 'chapter')
         home = self._svc(parsed).web_home(chapter)
-        if role == 'viewer':
-            home = {
-                'book': home['book'],
-                'progress': home['progress'],
-                'run': home['run'],
-                'recent_chapters': [{'chapter': c['chapter'], 'title': c['title'], 'committed_at': c['committed_at']}
-                                    for c in home['recent_chapters']],
-            }
         self._json(200, home)
 
     def _get_entities(self, parsed):
@@ -506,10 +473,6 @@ class Handler(BaseHTTPRequestHandler):
             return
         run_id = path[len('/api/v1/runs/'):].strip('/')
         data = self._svc(parsed).web_run(run_id)
-        if role == 'viewer':
-            data = {'run': data['run'],
-                    'chapters': [{'chapter': c['chapter'], 'title': c['title'], 'committed_at': c['committed_at']}
-                                 for c in data['chapters']]}
         self._json(200, data)
 
     def _get_chapter(self, path, parsed):
@@ -529,9 +492,7 @@ class Handler(BaseHTTPRequestHandler):
         role = self._require_role('chapter')
         if not role:
             return
-        data = self._svc(parsed).web_chapter(chapter)
-        if role == 'viewer':
-            data = {'chapter': data['chapter'], 'canon': data['canon']}
+        data = self._svc(parsed).web_chapter(chapter, self._q(parsed, 'version'))
         self._json(200, data)
 
     def _get_stream(self, path, parsed):

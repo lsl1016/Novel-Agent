@@ -10,35 +10,36 @@
   --line-strong: #cdd2db;
   --text: #1f2430;
   --muted: #69707d;
-  --shadow: 0 1px 2px rgba(16, 24, 40, .05), 0 4px 16px rgba(16, 24, 40, .06);
-  --shadow-lg: 0 12px 40px rgba(16, 24, 40, .14);
+  --shadow: 0 1px 2px rgba(16, 24, 40, 0.05), 0 4px 16px rgba(16, 24, 40, 0.06);
+  --shadow-lg: 0 12px 40px rgba(16, 24, 40, 0.14);
 
   /* 状态语义(亮底校准) */
-  --sem-canon: #a86e10;       /* 正典·定论 · 金 */
+  --sem-canon: #a86e10; /* 正典·定论 · 金 */
   --sem-canon-bg: #fdf3e0;
-  --sem-draft: #3f74ad;       /* 草稿·暂定 · 蓝 */
+  --sem-draft: #3f74ad; /* 草稿·暂定 · 蓝 */
   --sem-draft-bg: #e8f1fa;
-  --sem-secret: #92519e;      /* 秘密·作者私有 · 紫 */
+  --sem-secret: #92519e; /* 秘密·作者私有 · 紫 */
   --sem-secret-bg: #f6edf9;
-  --sem-block: #cf3c35;       /* 审校 BLOCK */
+  --sem-block: #cf3c35; /* 审校 BLOCK */
   --sem-block-bg: #fdecea;
-  --sem-warn: #b26a05;        /* 审校 WARN · 琥珀 */
+  --sem-warn: #b26a05; /* 审校 WARN · 琥珀 */
   --sem-warn-bg: #fdf3e2;
-  --sem-pass: #238551;        /* 审校 PASS · 绿 */
+  --sem-pass: #238551; /* 审校 PASS · 绿 */
   --sem-pass-bg: #e6f5ec;
-  --sem-truth: #7c4dbd;       /* 三方认知:世界真相 */
+  --sem-truth: #7c4dbd; /* 三方认知:世界真相 */
   --sem-truth-bg: #f0e9fa;
-  --sem-reader: #3b7fc4;      /* 三方认知:读者 */
+  --sem-reader: #3b7fc4; /* 三方认知:读者 */
   --sem-reader-bg: #e8f1fa;
-  --sem-character: #1e8f84;   /* 三方认知:角色 */
+  --sem-character: #1e8f84; /* 三方认知:角色 */
   --sem-character-bg: #e3f3f1;
-  --sem-active: #238551;      /* 线程活跃 */
-  --sem-dormant: #8a91a0;     /* 线程休眠 */
-  --sem-resolved: #a86e10;    /* 已兑付 */
+  --sem-active: #238551; /* 线程活跃 */
+  --sem-dormant: #8a91a0; /* 线程休眠 */
+  --sem-resolved: #a86e10; /* 已兑付 */
 
-  --accent: #3b7fc4;
-  --accent-bg: #e8f1fa;
-  --radius: 8px;
+  --accent: #386957;
+  --accent-bg: #eaf2ed;
+  --sem-accent: #386957;
+  --radius: 10px;
   --font-ui: -apple-system, 'PingFang SC', 'HarmonyOS Sans SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
   --font-prose: 'Noto Serif SC', 'Songti SC', 'SimSun', serif;
   --font-mono: ui-monospace, 'SF Mono', Menlo, monospace;
@@ -53,11 +54,18 @@
   --line-strong: #d3c6a6;
   --text: #33302a;
   --muted: #8d8471;
-  --shadow: 0 2px 14px rgba(120, 100, 60, .08);
+  --shadow: 0 2px 14px rgba(120, 100, 60, 0.08);
 }
 
-* { box-sizing: border-box; }
-html, body, #root { height: 100%; margin: 0; }
+* {
+  box-sizing: border-box;
+}
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
 body {
   background: var(--bg);
   color: var(--text);
@@ -65,4 +73,7 @@ body {
   font-size: 14px;
   -webkit-font-smoothing: antialiased;
 }
-a { color: inherit; text-decoration: none; }
+a {
+  color: inherit;
+  text-decoration: none;
+}

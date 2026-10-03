@@ -69,7 +69,7 @@ Novel Agent 是一个面向长篇小说的 AI 创作运行时:以**世界模型 
 - **🛡️ 八重审校闸门** — 4 个确定性审校者 + 4 个语义审校者,BLOCK 触发有界修订循环,知识泄漏零容忍。
 - **🎬 导演位(人工引导)** — `steering_mode` 让每章规划前暂停:输入本章引导指令,或让模型基于当前故事状态提案 3 个走向候选(带触达线程与风险),选定/改写后生效;`plan_review` 让计划生成后可查看/修改(JSON 编辑+重新校验)再批准开写。指令在计划生成后自动销账,不污染后续章节。
 - **🔁 有界自动推进** — 持久化运行状态机:断点续跑、自动重试、作者决策(HITL)与重新规划。
-- **🔐 权限隔离** — viewer(读者)/ writer / reviewer / planner / controller 五类应用角色 + admin;写作者与读者永远看不到作者层真相(服务端裁剪,非前端隐藏)。
+- **🌐 公开工作台** — 无登录、无用户权限分级，全部工作区、作者设定、草稿和操作公开可用；模型的剧情知识过滤与正典定稿校验仍保留。
 - **🧰 94 个 MCP 工具 + HTTP 门面** — 兼容 OpenAI / Anthropic 双协议的任意端点,同一套配置无缝切换;后端零第三方依赖。
 - **✦ 一句话开书** — `./novel.sh new "创意" 300 3` 或 Web 开书向导:四段式生成完整架构(蓝图/真相/实体/叙事/篇章)→ 跨引用确定性校验 → 有界修复回路 → 显式应用 → 自动开跑。
 - **🖥️ Web 工作台(九工作区)** — 项目主页/运行中心(实时流水线+导演台+HITL)/写作工作室(纸页+定稿闸门+草稿编辑)/开书向导/世界观设定集(可缩放图谱)/叙事看板(信念矩阵+伏笔台账)/规划器(弧线甘特)/审校中心(章节×审校器矩阵)/时间线;多书管理、慢操作作业执行器,静态 SPA 与 API 同进程,运行侧零 Node 依赖。
@@ -114,7 +114,7 @@ PYTHONPATH=mcp-server/src python3 -m novel_mcp.cli create-from-idea \
 ./novel.sh new "近未来都市悬疑:记忆质检员在被删记忆里发现同一个陌生人的求救信号。" 300 3
 ```
 
-生成 ≠ 应用:默认停在 dry-run 报告;`--apply` 显式过 `story_architect_apply`(与外部手写架构同一道跨引用闸门),`--run N` 再自动开跑。生成物跨引用(entity/thread/fact/arc)、窗口包含、揭示顺序、骨架覆盖率全部确定性校验,失败自动有界修复(≤3 轮)。MCP 侧等价工具:`novel_architecture_generate`(planner/admin 白名单)。
+生成 ≠ 应用:默认停在 dry-run 报告;`--apply` 显式过 `story_architect_apply`(与外部手写架构同一道跨引用闸门),`--run N` 再自动开跑。生成物跨引用(entity/thread/fact/arc)、窗口包含、揭示顺序、骨架覆盖率全部确定性校验,失败自动有界修复(≤3 轮)。MCP 侧等价工具:`novel_architecture_generate`，无需角色令牌。
 
 ## ✍️ 长跑写作与导出
 
@@ -162,7 +162,24 @@ python3 -m novel_mcp.web_api --db story-data/stress.db --static frontend/dist --
 
 开发模式:`cd frontend && npm run dev`(`:5173`,`/api` 自动代理到 `:8080`)。
 
-鉴权:配置 `NOVEL_FACADE_TOKENS` 后登录页输入令牌;`viewer` 角色即读者模式(只见正典与运行状态,草稿/规划在服务端裁剪)。未配置令牌时为本地开放模式(admin)。
+公开访问：不设置登录或用户权限，旧 `NOVEL_FACADE_TOKENS` 配置不再限制访问。任何可访问服务的人均可查看作者真相、编辑和发起模型任务；公开到网络时请明确这一行为。API Key 仍不返回浏览器，业务校验与定稿闸门不受影响。
+
+工作台交互（2026-10-03）：
+
+- ≥1280px 完整侧栏与三栏工作室；768–1279px 图标导航；<768px 抽屉导航、列表卡片与正文优先的工作室页签。
+- 首页以“下一步行动”为中心：继续写作、处理审校阻断、回答作者决策、恢复运行，数字可下钻。
+- 草稿停笔 3 秒自动保存为新版本；离开或切书时保护未保存内容，保留本地恢复副本。支持精确版本审校、引用定位、双栏差异与恢复为新版本。`⌘/Ctrl+S` 保存、`⌘/Ctrl+Enter` 审校、`⌘/Ctrl+Alt+←/→` 切章。
+- 书库、筛选、时间点与详情保存在 URL。切书会销毁旧书查询缓存、取消请求并关闭事件流，后台作业固定使用提交时的书库。
+- 开书向导分为创意规模、AI 访谈与约束、蓝图与假设确认三步；应用前展示准确的变更预览，拒绝的假设可附替代要求重新生成。
+
+回归验证（只使用临时数据库，AI 用离线夹具替代，不调用真实模型）：
+
+```bash
+cd mcp-server && python3 -m pytest -q
+cd ../frontend && npm ci && npm run build && npm run test:e2e
+# 使用系统 Chrome（macOS 默认路径），其他环境可设置 CHROME_PATH。
+# 没有系统 Chrome 时，先运行 npx playwright install chromium。
+```
 
 ## 🔌 Agent 接入与 MCP 网关
 
@@ -197,7 +214,7 @@ python3 -m novel_mcp.web_api --db story-data/stress.db --static frontend/dist --
 | 工具契约 | `docs/tool-contracts.md`(94 工具分组与正典/机密边界) |
 | 阶段报告 | `docs/phase-b-final-report.md` · `phase-c-report.md` · `a0/phase-a-v2` 实施报告 |
 | Agent 接入 | `docs/agent-paths.md`(双路径架构与外部 Agent 接入) |
-| 客户端与端点配置 | `docs/client-configs.md`(MCP 客户端、模型端点矩阵、角色鉴权) |
+| 客户端与端点配置 | `docs/client-configs.md`(MCP 客户端、模型端点矩阵、公开访问) |
 | MCP 网关注册 | `docs/mcp-gateway-tool-registration.md` |
 | 一句创意开书方案 | `docs/phase-c-product.md` · `docs/phase-c-design.md` |
 | Web 工作台设计 | `docs/phase-d-web-design.md` · `docs/phase-d-web-tech.md` |
@@ -218,11 +235,11 @@ novel-agent/
 └── novel.sh                   # 一键入口:start / watch / status / book / stop / metrics / smoke
 ```
 
-## 🔒 状态隔离与权限模型
+## 🔒 状态隔离与模型上下文
 
 - 规划者与语义审校者可以查看作者真相。
 - 写作者与修订写作者只会收到 `writer_context_get` 的安全上下文。
-- 不得将 `entity_author_get` 授予仅负责正文写作的写作者应用。
+- 所有使用者均可调用作者工具；内置正文模型仍由上下文编译器供给安全视角，这属于创作纪律，不是用户权限。
 - 规划、草稿、审校与运行状态都不是正典。
 - 只有成功执行的 `chapter_finalize` 才会修改正典故事图;`chapter_commit` 不是公开工具,抽取结果只能经 `candidate_promote`(携带证据链)进入正典。
 - 参考图保持只读,并与新小说相互独立。

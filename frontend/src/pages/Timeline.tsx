@@ -1,117 +1,193 @@
-import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { api } from '../api/client'
-import { Card, Pill } from '../components/ui'
+import { useApi, useQuery, useChapterCursor, useFilters, BookLink } from '../api/scope'
+import { Card, DetailFields, Drawer, PageHeader, PageState, DataTable, StatusBadge } from '../components/ui'
+import { AxisControls, ChapterAxis } from '../components/ChapterAxis'
+import { label } from '../components/labels'
 
-/** 时间线浏览器(D2):章节主轴 + 事件泳道(按类型分道) + 变迁轨道 */
+const types: Record<string, string> = {
+  event: '事件',
+  battle: '战斗',
+  discovery: '发现',
+  betrayal: '背叛',
+  death: '死亡',
+  meeting: '会面',
+}
 export default function Timeline() {
-  const [from, setFrom] = useState(1)
-  const [to, setTo] = useState(40)
-  const [sel, setSel] = useState<any | null>(null)
-  const { data: home } = useQuery({ queryKey: ['home'], queryFn: () => api.get('/api/v1/home') })
-  const latest = home?.progress?.latest_chapter || 40
-  const lo = from, hi = Math.min(to, latest)
-  const { data } = useQuery({
-    queryKey: ['timeline', lo, hi],
-    queryFn: () => api.get(`/api/v1/timeline?from=${lo}&to=${hi}`),
+  const api = useApi(),
+    { chapter } = useChapterCursor(),
+    { params, patch } = useFilters()
+  const home = useQuery({
+    queryKey: ['home'],
+    queryFn: () => api.get('/api/v1/home'),
   })
-  const events = data?.events || []
-  const span = Math.max(1, hi - lo + 1)
-  const x = (ch: number) => ((ch - lo + 0.5) / span) * 100
-
+  const latest = chapter || home.data?.progress?.latest_chapter || 1
+  const lo = Math.max(1, Number(params.get('from')) || 1),
+    hi = Math.max(lo, Number(params.get('to')) || latest),
+    entity = params.get('entity') || '',
+    type = params.get('type') || '',
+    event = params.get('event')
+  const query = useQuery({
+    queryKey: ['timeline', lo, hi, entity],
+    queryFn: () =>
+      api.get('/api/v1/timeline?' + new URLSearchParams({ from: String(lo), to: String(hi), entity })),
+  })
+  const detail = useQuery({
+    queryKey: ['event', event],
+    queryFn: () =>
+      api.call('event_get', /^\d+$/.test(event!) ? { event_id: Number(event) } : { event_key: event }),
+    enabled: !!event,
+  })
+  const data = query.data,
+    events = (data?.events || []).filter((e: any) => !type || e.event_type === type),
+    selected = detail.data
   const lanes: Record<string, any[]> = {}
-  for (const e of events) (lanes[e.event_type || 'event'] ||= []).push(e)
-
+  events.forEach((e: any) => (lanes[e.event_type || 'event'] ||= []).push(e))
+  const x = (ch: number) => ((ch - lo + 0.5) / Math.max(1, hi - lo + 1)) * 100
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, height: '100%' }}>
+    <div className="page-stack">
+      <PageHeader title="时间线" description={`截至第 ${latest} 章 · 追踪事件、关系与人物的变化`} />
       <Card>
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-          <span style={{ color: 'var(--muted)' }}>章节窗口</span>
-          <input type="number" value={lo} min={1} max={latest} onChange={(e) => setFrom(Math.max(1, Math.min(+e.target.value, hi)))} className="num" />
-          <span>–</span>
-          <input type="number" value={hi} min={lo} max={latest} onChange={(e) => setTo(+e.target.value)} className="num" />
-          <span style={{ color: 'var(--muted)', fontSize: 12 }}>共 {events.length} 事件 · {data?.attribute_changes?.length ?? 0} 属性变迁 · {data?.relation_changes?.length ?? 0} 关系变迁(最新已提交 ch{latest})</span>
-        </div>
-      </Card>
-
-      <Card title="世界事件时间线" style={{ overflow: 'auto' }}>
-        <div style={{ minWidth: 700, position: 'relative' }}>
-          {/* 章节刻度 */}
-          <div style={{ position: 'relative', height: 22, borderBottom: '1px solid var(--line)' }}>
-            {Array.from({ length: span }, (_, i) => (lo + i) % 5 === 0 && (
-              <span key={i} style={{ position: 'absolute', left: `${x(lo + i)}%`, transform: 'translateX(-50%)', color: 'var(--muted)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
-                {lo + i}
-              </span>
+        <div className="toolbar">
+          <AxisControls latest={latest} />
+          <select
+            className="input"
+            aria-label="事件类型"
+            value={type}
+            onChange={(e) => patch({ type: e.target.value })}
+          >
+            <option value="">全部事件</option>
+            {Object.entries(types).map(([k, v]) => (
+              <option key={k} value={k}>
+                {v}
+              </option>
             ))}
-          </div>
-          {/* 事件泳道 */}
-          {Object.entries(lanes).map(([type, es]) => (
-            <div key={type} style={{ position: 'relative', height: 44, borderBottom: '1px solid var(--line)' }}>
-              {Array.from({ length: span }, (_, i) => (lo + i) % 5 === 0 && (
-                <span key={i} style={{ position: 'absolute', left: `${x(lo + i)}%`, top: 0, bottom: 0, width: 1, background: 'var(--line)' }} />
-              ))}
-              <span style={{ position: 'sticky', left: 4, color: 'var(--muted)', fontSize: 11, top: 2, background: 'var(--panel)', padding: '0 4px', borderRadius: 3 }}>{typeLabel(type)} ({es.length})</span>
-              {es.map((e) => (
-                <span key={e.event_id ?? e.id} title={`ch${e.chapter} ${e.name}\n${e.outcome || ''}`}
-                  onClick={() => setSel(e)}
-                  style={{
-                    position: 'absolute', left: `${x(e.chapter)}%`, top: 19, transform: 'translateX(-50%)',
-                    width: 10, height: 10, borderRadius: 10, cursor: 'pointer',
-                    background: typeColor(e.event_type),
-                    boxShadow: sel && (sel.event_id ?? sel.id) === (e.event_id ?? e.id) ? '0 0 0 3px rgba(146,81,158,.3)' : '0 1px 3px rgba(16,24,40,.22)',
-                    border: '1.5px solid var(--panel)',
-                  }} />
-              ))}
-            </div>
-          ))}
-          {Object.keys(lanes).length === 0 && <div style={{ color: 'var(--muted)', padding: 14 }}>该窗口暂无一等事件(事件由作者/抽取管线创建)。</div>}
-          {/* 属性/关系变迁轨道 */}
-          {(data?.attribute_changes?.length || data?.relation_changes?.length) ? (
-            <div style={{ position: 'relative', height: 40 }}>
-              <span style={{ position: 'sticky', left: 4, color: 'var(--muted)', fontSize: 11 }}>变迁轨道</span>
-              {(data.attribute_changes || []).map((a: any, i: number) => (
-                <span key={'a' + i} title={`ch${a.start_chapter} ${a.entity_key}.${a.attr_key} = ${JSON.stringify(a.value)}`}
-                  style={{ position: 'absolute', left: `${x(a.start_chapter)}%`, top: 20, transform: 'translateX(-50%)', fontSize: 10, color: 'var(--sem-canon)', cursor: 'default' }}>◆</span>
-              ))}
-              {(data.relation_changes || []).map((r: any, i: number) => (
-                <span key={'r' + i} title={`ch${r.start_chapter} ${r.source_entity_key} ${r.relation_type} ${r.target_entity_key}${r.end_chapter ? ` (至 ch${r.end_chapter})` : ''}`}
-                  style={{ position: 'absolute', left: `${x(r.start_chapter)}%`, top: 30, transform: 'translateX(-50%)', fontSize: 10, color: 'var(--sem-reader)', cursor: 'default' }}>◇</span>
-              ))}
-            </div>
-          ) : null}
+          </select>
+          {entity && (
+            <button className="btn sm" onClick={() => patch({ entity: null })}>
+              清除实体筛选 ×
+            </button>
+          )}
         </div>
       </Card>
-
-      {sel && (
-        <Card title={`事件 · ch${sel.chapter}`} extra={<a onClick={() => setSel(null)} style={{ color: 'var(--muted)', cursor: 'pointer' }}>✕</a>}>
-          <div style={{ fontSize: 14, marginBottom: 6 }}>{sel.name}</div>
-          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', color: 'var(--muted)', fontSize: 13 }}>
-            <Pill tone="muted">{sel.event_type || 'event'}</Pill>
-            {sel.status && <Pill tone={sel.status === 'verified' ? 'pass' : 'warn'}>{sel.status}</Pill>}
-            {sel.thread_key && <span>线:{sel.thread_key}</span>}
-            {sel.location_key && <span>地:{sel.location_key}</span>}
-            {sel.cause_event_id && <span>因果上游:#{sel.cause_event_id}</span>}
-          </div>
-          {sel.outcome && <p style={{ margin: '8px 0 0', lineHeight: 1.8, fontSize: 13 }}>{sel.outcome}</p>}
-          {sel.consequence && <p style={{ margin: '4px 0 0', color: 'var(--muted)', fontSize: 12 }}>后果:{sel.consequence}</p>}
-          {sel.participants?.length > 0 && (
-            <div style={{ marginTop: 8, display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-              {sel.participants.map((p: any, i: number) => <Pill key={i} tone="draft">{p.entity_key}{p.participant_role ? ` · ${p.participant_role}` : ''}</Pill>)}
+      <PageState loading={query.isPending} error={query.error} onRetry={() => void query.refetch()} />
+      {data && (
+        <>
+          <Card title="世界事件">
+            <div className="axis-scroll">
+              <div className="axis-canvas">
+                <ChapterAxis from={lo} to={hi} />
+                {Object.entries(lanes).map(([t, list]) => (
+                  <div className="event-lane" key={t}>
+                    <span>{types[t] || t}</span>
+                    {list.map((e: any) => (
+                      <button
+                        className="event-dot"
+                        key={e.event_id ?? e.id}
+                        title={`第 ${e.chapter} 章 · ${e.name}`}
+                        style={{ left: x(e.chapter) + '%' }}
+                        onClick={() => patch({ event: e.event_id ?? e.id }, false)}
+                      >
+                        <span />
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </div>
             </div>
+            {!events.length && <PageState empty title="这一窗口还没有事件" />}
+          </Card>
+          <Card title="事件目录">
+            <DataTable
+              rows={events}
+              rowKey={(e: any) => e.event_id ?? e.id}
+              onPick={(e: any) => patch({ event: e.event_id ?? e.id }, false)}
+              columns={[
+                { key: 'name', label: '事件', render: (e: any) => e.name },
+                {
+                  key: 'type',
+                  label: '类型',
+                  render: (e: any) => types[e.event_type] || e.event_type,
+                },
+                {
+                  key: 'chapter',
+                  label: '章节',
+                  render: (e: any) => '第 ' + e.chapter + ' 章',
+                },
+              ]}
+            />
+          </Card>
+          <div className="two-columns">
+            <Card title="属性变迁">
+              {data.attribute_changes.map((a: any, i: number) => (
+                <BookLink
+                  key={i}
+                  className="list-row"
+                  to={'/world?entity=' + encodeURIComponent(a.entity_key) + '&at=' + a.start_chapter}
+                >
+                  <small>第 {a.start_chapter} 章</small>
+                  <span>
+                    {a.attr_key} → {String(a.value)}
+                  </span>
+                </BookLink>
+              ))}
+            </Card>
+            <Card title="关系变迁">
+              {data.relation_changes.map((r: any, i: number) => (
+                <BookLink
+                  key={i}
+                  className="list-row"
+                  to={'/world?entity=' + encodeURIComponent(r.source_entity_key) + '&at=' + r.start_chapter}
+                >
+                  <small>第 {r.start_chapter} 章</small>
+                  <span>{r.relation_type}</span>
+                </BookLink>
+              ))}
+            </Card>
+          </div>
+        </>
+      )}
+      {event && (
+        <Drawer title={selected?.name || '事件详情'} onClose={() => patch({ event: null })}>
+          <PageState loading={detail.isPending} error={detail.error} onRetry={() => void detail.refetch()} />
+          {selected && (
+            <>
+              <StatusBadge status={selected.status} />
+              <DetailFields
+                data={{
+                  类型: types[selected.event_type] || selected.event_type,
+                  结果: selected.outcome,
+                  后果: selected.consequence,
+                }}
+              />
+              <BookLink className="btn" to={'/studio/' + selected.chapter}>
+                阅读第 {selected.chapter} 章 ↗
+              </BookLink>
+              {selected.cause_event_id && (
+                <BookLink className="list-row" to={'/timeline?event=' + selected.cause_event_id}>
+                  查看上游原因 →
+                </BookLink>
+              )}
+              {selected.thread_key && (
+                <BookLink
+                  className="list-row"
+                  to={'/board?thread=' + encodeURIComponent(selected.thread_key)}
+                >
+                  关联叙事线 →
+                </BookLink>
+              )}
+              <h3>参与者</h3>
+              {selected.participants?.map((p: any, i: number) => (
+                <BookLink
+                  className="list-row"
+                  key={i}
+                  to={'/world?entity=' + encodeURIComponent(p.entity_key)}
+                >
+                  {p.entity_name || p.name || p.entity_key} ↗
+                </BookLink>
+              ))}
+            </>
           )}
-        </Card>
+        </Drawer>
       )}
     </div>
   )
-}
-
-function typeLabel(t: string) {
-  return ({ event: '事件', battle: '战斗', discovery: '发现', betrayal: '背叛', death: '死亡', meeting: '会面' } as any)[t] || t
-}
-
-function typeColor(t?: string) {
-  return ({
-    event: 'var(--sem-draft)', battle: 'var(--sem-block)', discovery: 'var(--sem-pass)',
-    betrayal: 'var(--sem-secret)', death: 'var(--sem-block)', meeting: 'var(--sem-character)',
-  } as any)[t || ''] || 'var(--sem-draft)'
 }

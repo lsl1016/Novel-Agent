@@ -101,32 +101,19 @@ def test_open_mode_home_chapter_actions(tmp_path):
         assert st == 200 and out['errNo'] == 0
 
 
-def test_role_auth_and_viewer_trimming(tmp_path, monkeypatch):
+def test_public_access_ignores_legacy_tokens(tmp_path, monkeypatch):
     monkeypatch.setenv('NOVEL_FACADE_TOKENS', 'viewer:vt,planner:pt')
     svc, run_id = seed(tmp_path)
     for base in start_server(tmp_path, svc):
-        try:
-            get(base, '/api/v1/home')
-            assert False, 'unauthenticated should 401'
-        except urllib.error.HTTPError as e:
-            assert e.code == 401
-        st, who = get(base, '/api/v1/whoami', token='pt')
-        assert who == {'role': 'planner', 'auth_enabled': True}
-        st, home = get(base, '/api/v1/home', token='vt')
-        assert st == 200
-        assert set(home.keys()) == {'book', 'progress', 'run', 'recent_chapters'}  # 无 arcs/pressure/inbox
-        st, ch = get(base, '/api/v1/chapter/2', token='vt')
-        assert st == 200 and set(ch.keys()) == {'chapter', 'canon'}
-        assert ch['canon'] is None  # 未提交章对 viewer 只有无正典
-        try:
-            get(base, '/api/v1/chapter/2/draft/1', token='vt')
-            assert False, 'viewer must not read drafts'
-        except urllib.error.HTTPError as e:
-            assert e.code == 403
-        st, out = post(base, '/api/v1/actions/blueprint_get', {}, token='vt')
-        assert st == 200 and out['errNo'] == 40301  # 工具面拒绝
-        st, out = post(base, '/api/v1/actions/novel_run_status', {'run_id': run_id}, token='vt')
-        assert st == 200 and out['errNo'] == 0
+        for token in (None, 'vt', 'pt', 'wrong'):
+            _, who = get(base, '/api/v1/whoami', token)
+            assert who == {'role': 'admin', 'auth_enabled': False}
+            _, home = get(base, '/api/v1/home', token)
+            assert 'pressure' in home and 'inbox' in home
+            _, draft = get(base, '/api/v1/chapter/2/draft/1', token)
+            assert draft['body'] == '草稿正文。'
+            _, out = post(base, '/api/v1/actions/blueprint_get', {}, token)
+            assert out['errNo'] == 0
 
 
 def test_sse_once(tmp_path, monkeypatch):
@@ -137,11 +124,7 @@ def test_sse_once(tmp_path, monkeypatch):
         assert st == 200
         assert 'event: run_event' in body and 'event: run_status' in body
         assert '"phase": "plan"' in body or '"phase":"plan"' in body
-        try:
-            raw(base, f'/api/v1/stream/runs/{run_id}?once=1', token='vt')
-            assert False, 'viewer must not see run stream'
-        except urllib.error.HTTPError as e:
-            assert e.code == 403
+        assert raw(base, f'/api/v1/stream/runs/{run_id}?once=1')[0] == 200
 
 
 def test_static_spa_fallback_and_traversal(tmp_path):
@@ -180,13 +163,8 @@ def test_d2_graph_board_timeline_and_roles(tmp_path, monkeypatch):
         # 时间线窗口
         st, t = get(base, '/api/v1/timeline?from=1&to=5', token='pt')
         assert st == 200 and t['from'] == 1
-        # 角色矩阵:viewer/writer 均为作者层 403
-        for tok in ('vt', 'wt'):
-            try:
-                get(base, '/api/v1/board', token=tok)
-                assert False, f'{tok} must not read board'
-            except urllib.error.HTTPError as e:
-                assert e.code == 403
+        for tok in (None, 'vt', 'wt'):
+            assert get(base, '/api/v1/board', token=tok)[0] == 200
 
 
 def test_decision_answer_route(tmp_path, monkeypatch):
@@ -215,14 +193,7 @@ def test_decision_answer_route(tmp_path, monkeypatch):
         assert out['ok']
         bp = svc.blueprint_get()
         assert any(x.get('answer') == '不引入,用无名随从' for x in bp['blueprint']['author_decisions'])
-        # viewer 不可作答
-        req = urllib.request.Request(f'{base}/api/v1/runs/{run_id}/decisions/{did}/answer', data=b'{}', method='POST',
-                                     headers={'Content-Type': 'application/json', 'Authorization': 'Bearer vt'})
-        try:
-            urllib.request.urlopen(req, timeout=10)
-            assert False
-        except urllib.error.HTTPError as e:
-            assert e.code == 403
+        assert get(base, f'/api/v1/runs/{run_id}')[0] == 200
 
 
 def test_d3_endpoints_books_jobs_settings_reviews_plan(tmp_path, monkeypatch):
@@ -242,16 +213,10 @@ def test_d3_endpoints_books_jobs_settings_reviews_plan(tmp_path, monkeypatch):
             assert False
         except urllib.error.HTTPError as e:
             assert e.code == 404
-        # viewer 不能发作业
-        try:
-            post(base, '/api/v1/jobs/chapter_plan_generate', {'args': {}}, token='vt')
-            assert False
-        except urllib.error.HTTPError as e:
-            assert e.code == 403
         # 作业:对新建空书跑一个真实慢工具等价物(chapter_plan_generate 无模型会失败,
         # 但作业机制本身应返回 job id 且状态可查)
         st, out = post(base, '/api/v1/jobs/chapter_plan_generate', {'args': {'chapter': 1}, 'book': 'second'}, token='pt')
-        assert st == 200 and out['ok'] and out['job']['status'] == 'running'
+        assert st == 200 and out['ok'] and out['job']['status'] in ('running', 'done', 'failed')
         jid = out['job']['id']
         import time as _t
         for _ in range(40):
@@ -260,12 +225,7 @@ def test_d3_endpoints_books_jobs_settings_reviews_plan(tmp_path, monkeypatch):
                 break
             _t.sleep(0.1)
         assert job['status'] in ('done', 'failed') and job['error'] is None or job['status'] == 'failed'
-        # 设置(viewer 403,planner 可见,密钥脱敏)
-        try:
-            get(base, '/api/v1/settings', token='vt')
-            assert False
-        except urllib.error.HTTPError as e:
-            assert e.code == 403
+        assert get(base, '/api/v1/settings')[1]['facade_auth']['enabled'] is False
         st, settings = get(base, '/api/v1/settings', token='pt')
         assert st == 200 and 'models' in settings and 'writer' in settings['models']
         # 审校聚合(空库无审校也应是 200)

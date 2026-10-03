@@ -1,7 +1,7 @@
-import { Navigate, Route, Routes } from 'react-router-dom'
-import { useSession } from './stores/session'
+import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { BookScope } from './api/scope'
 import Layout from './components/Layout'
-import Login from './pages/Login'
+import { ErrorBoundary } from './components/ui'
 import Home from './pages/Home'
 import RunCenter from './pages/RunCenter'
 import Studio from './pages/Studio'
@@ -14,28 +14,29 @@ import Wizard from './pages/Wizard'
 import Settings from './pages/Settings'
 
 export default function App() {
-  const token = useSession((s) => s.token)
-  const role = useSession((s) => s.role)
-  const authorLayer = role !== 'viewer' // 作者层页面,viewer 不入
-  const canCreate = role === 'planner' || role === 'admin'
-  if (!token) return <Login />
+  const location = useLocation()
+  const book = new URLSearchParams(location.search).get('book') || null
   return (
-    <Routes>
-      <Route element={<Layout />}>
-        <Route path="/" element={<Home />} />
-        <Route path="/runs" element={<RunCenter />} />
-        <Route path="/runs/:runId" element={<RunCenter />} />
-        <Route path="/studio/:chapter" element={<Studio />} />
-        <Route path="/studio" element={<Navigate to="/" replace />} />
-        <Route path="/wizard" element={canCreate ? <Wizard /> : <Navigate to="/" replace />} />
-        <Route path="/world" element={authorLayer ? <World /> : <Navigate to="/" replace />} />
-        <Route path="/board" element={authorLayer ? <Board /> : <Navigate to="/" replace />} />
-        <Route path="/planner" element={authorLayer ? <Planner /> : <Navigate to="/" replace />} />
-        <Route path="/reviews" element={authorLayer ? <Reviews /> : <Navigate to="/" replace />} />
-        <Route path="/timeline" element={authorLayer ? <Timeline /> : <Navigate to="/" replace />} />
-        <Route path="/settings" element={<Settings />} />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Route>
-    </Routes>
+    <ErrorBoundary key={JSON.stringify(book)}>
+      <BookScope key={JSON.stringify(book)} book={book}>
+        <Routes>
+          <Route element={<Layout />}>
+            <Route path="/" element={<Home />} />
+            <Route path="/runs" element={<RunCenter />} />
+            <Route path="/runs/:runId" element={<RunCenter />} />
+            <Route path="/studio/:chapter" element={<Studio />} />
+            <Route path="/studio" element={<Navigate to={'/studio/latest' + location.search} replace />} />
+            <Route path="/wizard" element={<Wizard />} />
+            <Route path="/world" element={<World />} />
+            <Route path="/board" element={<Board />} />
+            <Route path="/planner" element={<Planner />} />
+            <Route path="/reviews" element={<Reviews />} />
+            <Route path="/timeline" element={<Timeline />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="*" element={<Navigate to={'/' + location.search} replace />} />
+          </Route>
+        </Routes>
+      </BookScope>
+    </ErrorBoundary>
   )
 }

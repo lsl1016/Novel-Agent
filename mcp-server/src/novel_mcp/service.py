@@ -261,6 +261,10 @@ class NovelService:
         except Exception as exc:
             return {'ok':False,'error':{'code':'ARCHITECT_FAILED','message':str(exc)}}
 
+    def story_architect_interview(self, idea: str, options: dict | None = None):
+        from .architect_ai import interview
+        return interview(idea, options)
+
     def story_architect_apply(self,architecture:dict,dry_run:bool=False):
         """把作者提供的高层架构编译为权威的规划/故事状态。
 
@@ -1162,6 +1166,32 @@ class NovelService:
                 r[dst] = None
         return r
 
+    def web_architecture(self):
+        """Read-only snapshot for before/after architecture review."""
+        groups = {'world_facts': 'world_facts', 'entities': 'entities',
+                  'identity_profiles': 'identity_profiles', 'entity_aliases': 'entity_aliases',
+                  'entity_attributes': 'entity_attributes', 'entity_relations': 'entity_relations',
+                  'narrative_entity_links': 'narrative_entity_links', 'threads': 'threads',
+                  'mysteries': 'mysteries', 'emotion_debts': 'debts', 'arcs': 'arc_plans',
+                  'milestones': 'planning_milestones', 'thread_schedule': 'thread_schedule'}
+        out = {'blueprint': (self.planning.blueprint_get() or {}).get('blueprint') or {}}
+        with self.store.connect() as db:
+            for group, table in groups.items():
+                rows = []
+                for row in db.execute(f'SELECT * FROM {table}'):
+                    value = dict(row)
+                    for key in list(value):
+                        if key.endswith('_json'):
+                            value[key[:-5]] = jl(value.pop(key))
+                    if group in ('threads', 'mysteries'):
+                        value['target_min_chapter'] = value.pop('target_min', None)
+                        value['target_max_chapter'] = value.pop('target_max', None)
+                    if group == 'entities': value['chapter'] = value.pop('introduced_chapter', None)
+                    if group == 'entity_attributes': value['chapter'] = value.pop('start_chapter', None)
+                    rows.append(value)
+                out[group] = rows
+        return out
+
     def web_home(self, chapter: int | None = None):
         last = self.canon.max_committed_chapter() or 0
         at = int(chapter or last)
@@ -1174,7 +1204,8 @@ class NovelService:
                 'open_decisions': db.execute("SELECT COUNT(*) c FROM novel_run_decisions WHERE status='open'").fetchone()['c'],
                 'pending_candidates': db.execute("SELECT COUNT(*) c FROM extraction_candidates WHERE status='candidate'").fetchone()['c'],
                 'active_draft_chapters': db.execute(
-                    "SELECT COUNT(DISTINCT chapter) c FROM chapter_drafts WHERE status NOT IN ('committed','rejected')").fetchone()['c'],
+                    "SELECT COUNT(*) c FROM chapter_drafts d WHERE status NOT IN ('committed','rejected') "
+                    "AND version=(SELECT MAX(version) FROM chapter_drafts WHERE chapter=d.chapter)").fetchone()['c'],
             }
             arcs = [dict(r) for r in db.execute(
                 'SELECT arc_key,name,order_no,start_chapter,target_end_chapter,status FROM arc_plans ORDER BY order_no').fetchall()]
@@ -1182,6 +1213,7 @@ class NovelService:
         current_arc = next((a for a in arcs if a['start_chapter'] <= at and at <= (a['target_end_chapter'] or 10**9)), None)
         return {
             'book': {'title': (bp.get('blueprint') or {}).get('title') if isinstance(bp, dict) else None,
+                     'target_total_chapters': (bp.get('blueprint') or {}).get('target_total_chapters') if isinstance(bp, dict) else None,
                      'genre': (bp.get('blueprint') or {}).get('genre') if isinstance(bp, dict) else None},
             'cursor_chapter': at,
             'progress': {'committed_chapters': agg['c'], 'total_chars': agg['s'], 'latest_chapter': last},
@@ -1227,7 +1259,7 @@ class NovelService:
                 d['author_questions'] = []
         return {'run': run, 'events': list(reversed(events)), 'chapters': chapters, 'open_decisions': decisions}
 
-    def web_chapter(self, chapter: int) -> dict:
+    def web_chapter(self, chapter: int, version: int | None = None) -> dict:
         with self.store.connect() as db:
             row = db.execute('SELECT chapter,title,arc,pov,summary,body,committed_at FROM chapters WHERE chapter=?', (int(chapter),)).fetchone()
         canon = dict(row) if row else None
@@ -1236,12 +1268,14 @@ class NovelService:
                    'parent_version': d['parent_version'], 'created_at': d['created_at']}
                   for d in self.writing.list_drafts(int(chapter))]
         latest = self.writing.get_draft(int(chapter))
-        reviews = self.writing.get_reviews(int(chapter), latest['version']) if latest else []
+        selected = int(version) if version is not None else (latest['version'] if latest else None)
+        reviews = self.writing.get_reviews(int(chapter), selected) if selected else []
         review_summary = [{'reviewer_type': r['reviewer_type'], 'verdict': r.get('verdict'), 'score': r.get('score'),
                            'findings': len(r.get('findings') or [])} for r in reviews]
         return {'chapter': int(chapter), 'canon': canon, 'chapter_plan': plan, 'drafts': drafts,
                 'latest_draft_version': latest['version'] if latest else None,
-                'reviews': review_summary, 'gate': self._web_finalize_gate(int(chapter))}
+                'reviews': review_summary, 'review_details': reviews,
+                'reviewed_version': selected, 'gate': self._web_finalize_gate(int(chapter))}
 
     def _web_finalize_gate(self, chapter: int) -> dict:
         d = self.writing.get_draft(int(chapter))
@@ -1270,7 +1304,7 @@ class NovelService:
 
     def web_entities(self, chapter=None, q='', entity_type=None, limit=200):
         at = self._web_at(chapter)
-        rows = self.entity_graph.search(q or '', entity_type, 'active', at, 'reader', False, limit)
+        rows = self.entity_graph.search(q or '', entity_type, 'active', at, 'reader', True, limit)
         counts: dict[str, int] = {}
         for r in rows:
             counts[r.get('entity_type') or '?'] = counts.get(r.get('entity_type') or '?', 0) + 1
@@ -1434,6 +1468,9 @@ class NovelService:
             rows = db.execute(
                 'SELECT chapter,draft_version,reviewer_type,verdict,score,findings_json,created_at '
                 'FROM chapter_reviews WHERE chapter BETWEEN ? AND ? ORDER BY chapter, draft_version, id', (lo, hi)).fetchall()
+            latest = {r['chapter']: r['version'] for r in db.execute(
+                'SELECT chapter, MAX(version) AS version FROM chapter_drafts '
+                'WHERE chapter BETWEEN ? AND ? GROUP BY chapter', (lo, hi))}
         per_chapter: dict[int, list] = {}
         for r in rows:
             f = dict(r)
@@ -1441,7 +1478,7 @@ class NovelService:
                 findings = json.loads(f.pop('findings_json') or '[]') or []
             except Exception:
                 findings = []
-            f['findings'] = [{'code': x.get('code'), 'message': (x.get('message') or '')[:100]}
+            f['findings'] = [{k: x.get(k) for k in ('code', 'message', 'evidence', 'suggestion', 'paragraph', 'source_span', 'severity') if x.get(k) is not None}
                              for x in findings if isinstance(x, dict)]
             per_chapter.setdefault(f['chapter'], []).append(f)
         # 修订收敛:同一章多版本的发现数序列
@@ -1451,7 +1488,8 @@ class NovelService:
             if len(versions) > 1:
                 convergence[ch] = [{'version': v, 'findings': sum(len(r['findings']) for r in revs if r['draft_version'] == v)} for v in versions]
         return {'from': lo, 'to': hi, 'chapters': [
-            {'chapter': ch, 'reviews': revs} for ch, revs in sorted(per_chapter.items())
+            {'chapter': ch, 'latest_draft_version': latest.get(ch), 'reviews': per_chapter.get(ch, [])}
+            for ch in sorted(set(latest) | set(per_chapter))
         ], 'convergence': convergence}
 
     def web_plan(self, chapter=None):
@@ -1471,7 +1509,10 @@ class NovelService:
             rolling = [dict(r) for r in db.execute(
                 'SELECT chapter,arc_key,tier,status,primary_goal FROM rolling_plan_items WHERE chapter>=? ORDER BY chapter, tier', (max(1, at - 10),)).fetchall()]
             plans = [dict(r) for r in db.execute(
-                'SELECT chapter,arc_key,status,validation_status,version FROM chapter_plans ORDER BY chapter').fetchall()]
+                "SELECT p.chapter,p.arc_key,p.status,p.validation_status,p.version, "
+                "EXISTS(SELECT 1 FROM chapter_drafts d WHERE d.chapter=p.chapter AND d.status NOT IN ('committed','rejected') "
+                "AND d.version=(SELECT MAX(version) FROM chapter_drafts WHERE chapter=p.chapter)) active_draft "
+                "FROM chapter_plans p ORDER BY p.chapter").fetchall()]
             threads = [dict(r) for r in db.execute(
                 'SELECT thread_key,name,thread_type,status,introduced_chapter,target_min,target_max FROM threads ORDER BY introduced_chapter').fetchall()]
         return {'chapter': at, 'arcs': arcs, 'milestones': milestones, 'thread_schedule': schedule,

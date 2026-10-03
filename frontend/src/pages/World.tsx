@@ -1,152 +1,255 @@
-import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { api } from '../api/client'
-import { Card, Pill } from '../components/ui'
-import { useCursor } from '../stores/cursor'
+import { useEffect, useState } from 'react'
+import { useApi, useQuery, useChapterCursor, useFilters, BookLink } from '../api/scope'
+import {
+  Card,
+  DataTable,
+  DetailFields,
+  Drawer,
+  PageHeader,
+  PageState,
+  SegmentedControl,
+  StatusBadge,
+} from '../components/ui'
+import { label } from '../components/labels'
 import GraphCanvas from '../components/GraphCanvas'
 
-/** 世界观设定集(D2):目录表格 ↔ 图谱画布 双视图 + 实体档案抽屉 */
 export default function World() {
-  const cursor = useCursor((s) => s.chapter)
-  const [view, setView] = useState<'table' | 'graph'>('table')
-  const [q, setQ] = useState('')
-  const [type, setType] = useState('')
-  const [picked, setPicked] = useState<string | null>(null)
-
-  const { data } = useQuery({
-    queryKey: ['entities', cursor, q, type],
-    queryFn: () => api.get(`/api/v1/entities?${new URLSearchParams({ ...(cursor ? { chapter: String(cursor) } : {}), q, type })}`),
+  const api = useApi(),
+    { chapter } = useChapterCursor(),
+    { params, patch } = useFilters()
+  const view = params.get('view') || 'table',
+    picked = params.get('entity'),
+    type = params.get('type') || '',
+    q = params.get('q') || ''
+  const [search, setSearch] = useState(q)
+  useEffect(() => setSearch(q), [q])
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (search !== q) patch({ q: search })
+    }, 200)
+    return () => clearTimeout(t)
+  }, [search, q])
+  const query = useQuery({
+    queryKey: ['entities', chapter, q, type],
+    queryFn: () =>
+      api.get(
+        '/api/v1/entities?' +
+          new URLSearchParams({
+            q,
+            type,
+            ...(chapter ? { chapter: String(chapter) } : {}),
+          }),
+      ),
   })
-  const { data: graph } = useQuery({
-    queryKey: ['graph', cursor],
-    queryFn: () => api.get(`/api/v1/graph${cursor ? `?chapter=${cursor}` : ''}`),
+  const graph = useQuery({
+    queryKey: ['graph', chapter],
+    queryFn: () => api.get('/api/v1/graph' + (chapter ? '?chapter=' + chapter : '')),
     enabled: view === 'graph',
   })
-  const { data: detail } = useQuery({
-    queryKey: ['entity', picked, cursor],
-    queryFn: () => api.get(`/api/v1/entity/${picked}${cursor ? `?chapter=${cursor}` : ''}`),
+  const detail = useQuery({
+    queryKey: ['entity', picked, chapter],
+    queryFn: () =>
+      api.get('/api/v1/entity/' + encodeURIComponent(picked!) + (chapter ? '?chapter=' + chapter : '')),
     enabled: !!picked,
   })
-
-  const entities = data?.entities || []
-  const types = Object.entries<any>(data?.type_counts || {}).sort((a, b) => b[1] - a[1])
-
+  const candidates = useQuery({
+    queryKey: ['candidates'],
+    queryFn: () => api.call('candidate_list', { status: 'candidate', limit: 100 }),
+    enabled: view === 'candidates',
+  })
+  const d = detail.data
   return (
-    <div style={{ display: 'flex', gap: 14, height: '100%' }}>
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 14, overflow: 'auto' }}>
-        <Card>
-          <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
-            <input className="input" style={{ width: 210 }} value={q} onChange={(e) => setQ(e.target.value)} placeholder="搜索名称/键…" />
-            <button onClick={() => setType('')} className={`btn sm${type === '' ? ' primary' : ''}`}>全部 {data?.entities.length ?? ''}</button>
-            {types.map(([t, n]) => (
-              <button key={t} onClick={() => setType(t)} className={`btn sm${type === t ? ' primary' : ''}`}>{tLabel(t)} {n}</button>
-            ))}
-            <div style={{ flex: 1 }} />
-            {['table', 'graph'].map((v) => (
-              <button key={v} onClick={() => setView(v as any)} className={`btn sm${view === v ? ' primary' : ''}`}>{v === 'table' ? '目录' : '图谱'}</button>
-            ))}
-          </div>
-        </Card>
-
-        {view === 'table' ? (
-          <Card>
-            <table className="tbl">
-              <thead><tr>
-                <th>名称</th><th>类型</th><th>描述</th><th>登场章</th><th>关联线</th>
-              </tr></thead>
-              <tbody>
-                {entities.map((e: any) => (
-                  <tr key={e.entity_key} className="row-hover" onClick={() => setPicked(e.entity_key)}
-                    style={{ background: picked === e.entity_key ? 'var(--panel-2)' : undefined }}>
-                    <td style={{ fontWeight: 600 }}>{e.name}</td>
-                    <td><Pill tone={e.entity_type === 'Character' ? 'draft' : e.entity_type === 'Faction' ? 'secret' : e.entity_type === 'Location' ? 'pass' : 'canon'}>{tLabel(e.entity_type)}</Pill></td>
-                    <td className="dim" style={{ maxWidth: 300, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.description || '—'}</td>
-                    <td className="mono">ch{e.introduced_chapter ?? '?'}</td>
-                    <td className="dim">{e.thread_count ?? ''}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </Card>
-        ) : (
-          <Card title={`实体图谱 · 截至 第 ${graph?.chapter ?? '最新'} 章`} extra={<span style={{ color: 'var(--muted)', fontSize: 12 }}>实线=公开 · 紫红虚线=秘密 · 形状=类型</span>}>
-            {graph && <GraphCanvas nodes={graph.nodes} edges={graph.edges} onPick={setPicked} focus={picked} />}
-          </Card>
-        )}
-      </div>
-
-      {detail && (
-        <aside style={{ width: 380, overflow: 'auto' }}>
-          <Card title={<span>{detail.name} <Pill tone="muted">{tLabel(detail.entity_type)}</Pill></span>}
-            extra={<a onClick={() => setPicked(null)} style={{ color: 'var(--muted)', cursor: 'pointer' }}>✕</a>}>
-            <p style={{ margin: '0 0 10px', color: 'var(--muted)', lineHeight: 1.7 }}>{detail.description}</p>
-
-            {detail.identity_profiles?.length > 0 && (
-              <Section title="身份档案">
-                {detail.identity_profiles.map((p: any) => (
-                  <div key={p.profile_key} style={{ display: 'flex', gap: 8, padding: '3px 0', fontSize: 13 }}>
-                    <Pill tone={p.secrecy !== 'public' ? 'secret' : 'muted'}>{p.kind}</Pill>
-                    <span>{p.value}</span>
-                    {p.scope_key && <span style={{ color: 'var(--muted)' }}>@{p.scope_key}</span>}
-                  </div>
-                ))}
-              </Section>
+    <div className="page-stack">
+      <PageHeader
+        title="世界观"
+        description={`截至第 ${chapter || query.data?.chapter || '最新'} 章 · 人物、地点与故事设定`}
+      />
+      <Card>
+        <div className="toolbar">
+          <input
+            className="input"
+            aria-label="搜索世界观"
+            placeholder="搜索人物、地点、器物…"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+          <select
+            className="input"
+            aria-label="实体类型"
+            value={type}
+            onChange={(e) => patch({ type: e.target.value })}
+          >
+            <option value="">全部类型</option>
+            {['Character', 'Faction', 'Location', 'Artifact', 'Item', 'Skill', 'Realm', 'Concept'].map(
+              (t) => (
+                <option key={t} value={t}>
+                  {label(t)}
+                </option>
+              ),
             )}
-
-            <Section title={`属性时间线 (截至 ch${detail.chapter})`}>
-              {detail.attributes.length === 0 && <Empty />}
-              {detail.attributes.map((a: any, i: number) => (
-                <div key={i} style={{ display: 'flex', gap: 8, padding: '3px 0', fontSize: 13 }}>
-                  <span style={{ color: 'var(--sem-draft)', minWidth: 72 }}>{a.attr_key}</span>
-                  <span>{String(a.value)}</span>
-                  <span style={{ marginLeft: 'auto', color: 'var(--muted)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>ch{a.start_chapter}{a.end_chapter ? `–${a.end_chapter}` : '–'}</span>
-                  {a.secrecy !== 'public' && <Pill tone="secret">🔒</Pill>}
+          </select>
+          <SegmentedControl
+            value={view}
+            onChange={(v) => patch({ view: v })}
+            options={[
+              { value: 'table', label: '目录' },
+              { value: 'graph', label: '关系图谱' },
+              { value: 'candidates', label: '待整理' },
+            ]}
+          />
+        </div>
+      </Card>
+      {view === 'candidates' ? (
+        <Card title="抽取候选">
+          <PageState
+            loading={candidates.isPending}
+            error={candidates.error}
+            onRetry={() => void candidates.refetch()}
+          />
+          {candidates.data && (
+            <DataTable
+              rows={Array.isArray(candidates.data) ? candidates.data : candidates.data.candidates || []}
+              rowKey={(r: any) => r.id || r.candidate_id}
+              columns={[
+                {
+                  key: 'name',
+                  label: '内容',
+                  render: (r: any) => r.name || r.node_key || r.candidate_id,
+                },
+                {
+                  key: 'chapter',
+                  label: '来源',
+                  render: (r: any) => <BookLink to={'/studio/' + r.chapter}>第 {r.chapter} 章 ↗</BookLink>,
+                },
+                {
+                  key: 'status',
+                  label: '状态',
+                  render: () => <StatusBadge tone="warn">待整理</StatusBadge>,
+                },
+              ]}
+              empty="没有待整理的候选"
+            />
+          )}
+        </Card>
+      ) : view === 'graph' ? (
+        <Card title="实体关系">
+          <p className="small muted">点击节点查看档案。实线代表已公开关系，虚线标记故事中的秘密关系。</p>
+          <PageState loading={graph.isPending} error={graph.error} onRetry={() => void graph.refetch()} />
+          {graph.data && (
+            <GraphCanvas
+              nodes={graph.data.nodes.filter(
+                (n: any) => (!type || n.type === type) && (!q || n.name.includes(q) || n.key.includes(q)),
+              )}
+              edges={graph.data.edges}
+              focus={picked}
+              onPick={(entity) => patch({ entity }, false)}
+            />
+          )}
+        </Card>
+      ) : (
+        <Card title={`设定目录 · ${query.data?.entities?.length || 0} 项`}>
+          <PageState loading={query.isPending} error={query.error} onRetry={() => void query.refetch()} />
+          {query.data && (
+            <DataTable
+              rows={query.data.entities}
+              rowKey={(e: any) => e.entity_key}
+              onPick={(e: any) => patch({ entity: e.entity_key }, false)}
+              columns={[
+                {
+                  key: 'name',
+                  label: '名称',
+                  render: (e: any) => <strong>{e.name}</strong>,
+                },
+                {
+                  key: 'type',
+                  label: '类型',
+                  render: (e: any) => <StatusBadge tone="draft">{label(e.entity_type)}</StatusBadge>,
+                },
+                {
+                  key: 'chapter',
+                  label: '首次登场',
+                  render: (e: any) => '第 ' + e.introduced_chapter + ' 章',
+                },
+                {
+                  key: 'description',
+                  label: '描述',
+                  render: (e: any) => e.description || '—',
+                },
+              ]}
+              empty="没有匹配的设定"
+            />
+          )}
+        </Card>
+      )}
+      {picked && (
+        <Drawer title={d?.name || '实体档案'} onClose={() => patch({ entity: null })}>
+          <PageState loading={detail.isPending} error={detail.error} onRetry={() => void detail.refetch()} />
+          {d && (
+            <>
+              <StatusBadge tone="draft">{label(d.entity_type)}</StatusBadge>
+              <p>{d.description || '暂无描述'}</p>
+              <DetailFields
+                data={{
+                  首次登场: '第 ' + d.introduced_chapter + ' 章',
+                  身份档案: d.identity_profiles?.map((x: any) => x.value),
+                  别名: d.aliases?.map((x: any) => x.alias),
+                }}
+              />
+              <h3>属性沿革</h3>
+              {d.attributes.map((x: any, i: number) => (
+                <div key={i} className="list-row">
+                  <span>{x.attr_key}</span>
+                  <span>{String(x.value)}</span>
+                  <small>第 {x.start_chapter} 章</small>
                 </div>
               ))}
-            </Section>
-
-            <Section title="关系">
-              {detail.relations.length === 0 && <Empty />}
-              {detail.relations.map((r: any, i: number) => {
-                const outgoing = r.source_entity_key === detail.entity_key
+              <h3>人物与事物的关系</h3>
+              {d.relations.map((r: any, i: number) => {
+                const out = r.source_entity_key === picked
                 return (
-                  <div key={i} style={{ display: 'flex', gap: 8, padding: '3px 0', fontSize: 13 }}>
-                    <span style={{ color: 'var(--muted)' }}>{outgoing ? '→' : '←'}</span>
-                    <code style={{ fontSize: 11, color: 'var(--accent)' }}>{r.relation_type}</code>
-                    <span>{outgoing ? r.target_name : r.source_name}</span>
-                    <span style={{ marginLeft: 'auto', color: 'var(--muted)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>ch{r.start_chapter}–{r.end_chapter ?? '今'}</span>
-                  </div>
+                  <BookLink
+                    className="list-row"
+                    key={i}
+                    to={
+                      '/world?entity=' + encodeURIComponent(out ? r.target_entity_key : r.source_entity_key)
+                    }
+                  >
+                    <StatusBadge tone="muted">{r.relation_type}</StatusBadge>
+                    <span>
+                      {out ? r.target_name || r.target_entity_key : r.source_name || r.source_entity_key}
+                    </span>
+                    <span>↗</span>
+                  </BookLink>
                 )
               })}
-            </Section>
-
-            <Section title={`叙事参与 (${detail.narrative_links.length})`}>
-              {detail.narrative_links.slice(0, 12).map((l: any, i: number) => (
-                <div key={i} style={{ display: 'flex', gap: 8, padding: '2px 0', fontSize: 13 }}>
-                  <span style={{ color: 'var(--muted)', fontFamily: 'var(--font-mono)', fontSize: 12 }}>ch{l.chapter}</span>
-                  <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.narrative_name}</span>
-                  <span style={{ marginLeft: 'auto', color: 'var(--muted)', fontSize: 12 }}>{l.role}</span>
-                </div>
+              <h3>叙事参与</h3>
+              {d.narrative_links.map((l: any, i: number) => (
+                <BookLink
+                  className="list-row"
+                  key={i}
+                  to={'/board?thread=' + encodeURIComponent(l.narrative_key)}
+                >
+                  {l.narrative_name || l.narrative_key} →
+                </BookLink>
               ))}
-              {detail.narrative_links.length > 12 && <div style={{ color: 'var(--muted)', fontSize: 12 }}>…共 {detail.narrative_links.length} 条</div>}
-            </Section>
-          </Card>
-        </aside>
+              <h3>证据来源</h3>
+              {d.assertions?.length ? (
+                d.assertions.map((a: any) => (
+                  <BookLink key={a.assertion_id} className="list-row" to={'/studio/' + a.chapter}>
+                    第 {a.chapter} 章 · {a.source_span || a.predicate} ↗
+                  </BookLink>
+                ))
+              ) : (
+                <p className="muted small">暂无证据记录</p>
+              )}
+              <details>
+                <summary>技术标识</summary>
+                <code>{d.entity_key}</code>
+              </details>
+            </>
+          )}
+        </Drawer>
       )}
     </div>
   )
-}
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div style={{ borderTop: '1px solid var(--line)', marginTop: 10, paddingTop: 8 }}>
-      <div style={{ color: 'var(--muted)', fontSize: 12, marginBottom: 4, letterSpacing: '0.05em' }}>{title}</div>
-      {children}
-    </div>
-  )
-}
-const Empty = () => <div style={{ color: 'var(--muted)', fontSize: 12 }}>暂无</div>
-
-function tLabel(t: string) {
-  return ({ Character: '人物', Faction: '势力', Location: '地点', Artifact: '器物', Item: '物品', Power: '力量' } as any)[t] || t
 }

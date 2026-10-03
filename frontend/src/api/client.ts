@@ -1,75 +1,78 @@
-import { useSession } from '../stores/session'
-
 export class ApiError extends Error {
-  status: number
-  constructor(status: number, message: string) {
+  constructor(
+    public status: number,
+    message: string,
+  ) {
     super(message)
-    this.status = status
   }
 }
 
-/** 给端点追加当前书参数(多书管理;默认书不带参数) */
-function withBook(path: string): string {
-  const book = useSession.getState().book
-  if (!book || path.includes('book=')) return path
-  return path + (path.includes('?') ? '&' : '?') + `book=${encodeURIComponent(book)}`
-}
-
-async function request(path: string, init?: RequestInit): Promise<any> {
-  const { token } = useSession.getState()
-  const resp = await fetch(withBook(path), {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...(token ? { Authorization: `Bearer ${token}` } : {}),
-      ...(init?.headers || {}),
+/** Every client captures an immutable book; in-flight work cannot drift to another book. */
+export function createApi(book: string | null, scopeSignal?: AbortSignal) {
+  function url(path: string, target: string | null = book) {
+    const u = new URL(path, window.location.origin)
+    if (!u.searchParams.has('book')) u.searchParams.set('book', target || '')
+    return u.pathname + u.search
+  }
+  async function request(path: string, init?: RequestInit, target: string | null = book): Promise<any> {
+    scopeSignal?.throwIfAborted()
+    const resp = await fetch(url(path, target), {
+      ...init,
+      signal: init?.signal || scopeSignal,
+      headers: { 'Content-Type': 'application/json', ...init?.headers },
+    })
+    const body = await resp.json()
+    if (!resp.ok)
+      throw new ApiError(resp.status, body?.error?.message || body?.errMsg || `请求失败（${resp.status}）`)
+    return body
+  }
+  const client = {
+    book,
+    url,
+    get: (path: string, signal?: AbortSignal) => request(path, { signal: signal || scopeSignal }),
+    post: (path: string, body: unknown, target: string | null = book) =>
+      request(path, { method: 'POST', body: JSON.stringify(body ?? {}) }, target),
+    action: (tool: string, args: Record<string, unknown>) =>
+      request('/api/v1/actions/' + tool, {
+        method: 'POST',
+        body: JSON.stringify(args),
+      }),
+    async call(tool: string, args: Record<string, unknown> = {}) {
+      const out = await client.action(tool, args)
+      if (out.errNo !== 0) throw new Error(out.errMsg || '操作未完成')
+      if (out.data?.ok === false)
+        throw new Error(out.data.error?.message || JSON.stringify(out.data.errors || out.data))
+      return out.data
     },
-  })
-  if (resp.status === 401) {
-    useSession.getState().logout()
-    throw new ApiError(401, 'unauthorized')
+    postJob: (tool: string, args: Record<string, unknown>, target: string | null = book) =>
+      request(
+        '/api/v1/jobs/' + tool,
+        { method: 'POST', body: JSON.stringify({ args, book: target }) },
+        target,
+      ),
+    async pollJob(id: string, onTick?: (job: any) => void, timeoutMs = 600000): Promise<any> {
+      const start = Date.now()
+      while (true) {
+        const job = await request('/api/v1/jobs/' + id)
+        onTick?.(job)
+        if (job.status === 'done') return job.result
+        if (job.status === 'failed') throw new Error(job.error || '任务失败')
+        if (Date.now() - start > timeoutMs) throw new Error('任务仍在后台进行，请稍后恢复查看')
+        await new Promise<void>((resolve, reject) => {
+          const finish = () => {
+            scopeSignal?.removeEventListener('abort', abort)
+            resolve()
+          }
+          const timer = window.setTimeout(finish, 1200)
+          const abort = () => {
+            clearTimeout(timer)
+            reject(new DOMException('已切换书库', 'AbortError'))
+          }
+          scopeSignal?.addEventListener('abort', abort, { once: true })
+        })
+      }
+    },
   }
-  if (!resp.ok) {
-    let message = `HTTP ${resp.status}`
-    try {
-      const body = await resp.json()
-      message = body?.error?.message || body?.errMsg || message
-    } catch { /* keep default */ }
-    throw new ApiError(resp.status, message)
-  }
-  return resp.json()
+  return client
 }
-
-export const api = {
-  get: (path: string) => request(path),
-  post: (path: string, body: unknown) =>
-    request(path, { method: 'POST', body: JSON.stringify(body ?? {}) }),
-  /** 快写动作:POST /api/v1/actions/{tool},返回 facade 的 {errNo,...} 信封 */
-  action: (tool: string, args: Record<string, unknown>) =>
-    request(`/api/v1/actions/${tool}`, { method: 'POST', body: JSON.stringify(args) }),
-  /** 慢操作作业:立即返回 job id,前端轮询 */
-  postJob: (tool: string, args: Record<string, unknown>, book?: string | null) =>
-    request('/api/v1/jobs/' + tool, { method: 'POST', body: JSON.stringify({ args, book: book ?? useSession.getState().book }) }),
-  getJob: (id: string) => request(`/api/v1/jobs/${id}`),
-}
-
-export function sseUrl(path: string): string {
-  const { token, book } = useSession.getState()
-  let p = path + (path.includes('?') ? '&' : '?')
-  if (token) p += `token=${encodeURIComponent(token)}&`
-  if (book) p += `book=${encodeURIComponent(book)}`
-  return p
-}
-
-/** 作业轮询到终态;onTick 可用于进度展示 */
-export async function pollJob(id: string, onTick?: (job: any) => void, timeoutMs = 600000): Promise<any> {
-  const start = Date.now()
-  for (;;) {
-    const job = await api.getJob(id)
-    onTick?.(job)
-    if (job.status === 'done') return job.result
-    if (job.status === 'failed') throw new Error(job.error || '作业失败')
-    if (Date.now() - start > timeoutMs) throw new Error('作业超时')
-    await new Promise((r) => setTimeout(r, 1200))
-  }
-}
+export type BookApi = ReturnType<typeof createApi>

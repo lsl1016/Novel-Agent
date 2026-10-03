@@ -70,21 +70,10 @@ NOVEL_DIRECTOR_MODEL=glm-4.5-air
 
 可选观察开关:`NOVEL_THINKING_LOG=<jsonl路径>` 把思考型模型的 thinking 块(OpenAI 协议的 `reasoning_content` 同理)按行追加写入,供实时观察规划/审校的推理过程(`scripts/stress/watch.py --thinking`);未设置时零开销,进程启动时读取、跑到一半无法追加。
 
-## HTTP 门面角色鉴权(V0.10,已从建议变为强制实现)
+## 公开访问（2026-10-03）
 
-```bash
-# 多角色令牌:writer/reviewer/planner/controller/admin
-NOVEL_FACADE_TOKENS="writer:t1,reviewer:t2,planner:t3,controller:t4,admin:t5"
-# 兼容旧单令牌(映射为 admin);两者都未配置时为本地开放模式
-```
+本项目不设置登录或用户权限。Web 工作台、HTTP 门面与 MCP 的公开工具均无需角色令牌，历史 `NOVEL_FACADE_TOKENS` 等鉴权配置不再生效。`auth.py` 保留兼容函数，统一允许访问。
 
-角色 × 工具白名单与参数级守卫由 `novel_mcp/auth.py` 强制(如 writer 角色只能编译 writer 视角上下文、reviewer 不得 finalize),矩阵详见源码或 `docs/agent-paths.md`。
+所有可访问服务的人均可读取作者设定、草稿和运行信息，也可以写入和发起模型任务。默认仍监听本机；如果绑定外部地址，写操作同样公开。
 
-## 实体图角色分离
-
-经动态 `lsl1016/mcp-server` 网关接入时,为每类应用发放独立的角色令牌(见上节,服务端强制):
-
-- writer 应用:prose-safe 读 + 草稿写;`entity_author_get`、`belief_get`(返回 World Truth 真值)等作者层读均不在白名单。
-- reviewer 应用:作者视角读 + 审校/自动修订(参数守卫禁止 finalize)。
-- planner/作者应用:作者层全量(实体变更、身份档案、断言、披露、候选晋升)。
-- controller 应用:Run 控制 + `chapter_finalize`。
+`writer`、`planner`、`reviewer` 等名称仍用于模型路由与叙事视角：内置正文模型只接收安全上下文，避免提前泄露剧情；它们不再代表使用者的访问权限。工具发布清单、参数校验、跨引用检查和精确版本定稿闸门仍有效，模型 API Key 不下发浏览器。
