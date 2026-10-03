@@ -149,6 +149,33 @@ python3 scripts/stress/metrics.py --db story-data/stress.db
 
 浏览器可视化长跑:实时流水线监视(SSE)、章节纸页阅读、定稿检查单、审校结论、实体图谱、叙事看板与时间线。同一进程提供静态 SPA + `/api/v1` 聚合读 + 动作透传(与外部 Agent 走同一闸门),后端零新增依赖:
 
+<p align="center">
+  <img src="docs/images/web-home.png" alt="项目主页 — 下一步行动与创作进度" width="860">
+</p>
+
+<p align="center">
+  <b>写作工作室</b> — 纸页正文、本章计划、写作上下文与定稿检查单
+</p>
+<p align="center">
+  <img src="docs/images/web-studio.png" alt="写作工作室" width="860">
+</p>
+
+<table>
+  <tr>
+    <td align="center"><img src="docs/images/web-run-center.png" alt="运行中心" width="280"><br><sub><b>运行中心</b> — 长跑启动、导演模式与实时活动流</sub></td>
+    <td align="center"><img src="docs/images/web-planner.png" alt="章节规划" width="280"><br><sub><b>章节规划</b> — 篇章时间轴与滚动规划</sub></td>
+    <td align="center"><img src="docs/images/web-reviews.png" alt="审校中心" width="280"><br><sub><b>审校中心</b> — 章节 × 审校器矩阵与修订收敛</sub></td>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/images/web-world-graph.png" alt="世界观关系图谱" width="280"><br><sub><b>世界观</b> — 实体目录与可缩放关系图谱</sub></td>
+    <td align="center"><img src="docs/images/web-board.png" alt="叙事看板" width="280"><br><sub><b>叙事看板</b> — 叙事线、谜团、伏笔与情感债台账</sub></td>
+    <td align="center"><img src="docs/images/web-timeline.png" alt="时间线" width="280"><br><sub><b>时间线</b> — 世界事件与人物变化追踪</sub></td>
+  </tr>
+  <tr>
+    <td align="center" colspan="3"><img src="docs/images/web-wizard.png" alt="开书向导" width="560"><br><sub><b>开书向导</b> — 一句话创意 → AI 访谈 → 蓝图确认三步开书</sub></td>
+  </tr>
+</table>
+
 ```bash
 # 1) 构建前端产物(一次性;运行不需要 Node)
 cd frontend && npm install && npm run build && cd ..
